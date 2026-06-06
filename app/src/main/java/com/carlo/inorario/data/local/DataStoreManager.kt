@@ -17,6 +17,7 @@ import com.carlo.inorario.data.model.SuburbanRoute
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "in_orario_preferences")
@@ -171,13 +172,9 @@ class DataStoreManager(private val context: Context) {
         preferences[FCM_TOKEN] ?: ""
     }
 
-    val hasCappuccinoFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
-        preferences[DEVELOPER_MOCK_PURCHASES] == true || (preferences[HAS_CAPPUCCINO] ?: false)
-    }
+    val hasCappuccinoFlow: Flow<Boolean> = flowOf(true)
 
-    val hasColazioneFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
-        preferences[DEVELOPER_MOCK_PURCHASES] == true || (preferences[HAS_COLAZIONE] ?: false)
-    }
+    val hasColazioneFlow: Flow<Boolean> = flowOf(true)
 
     val developerMockPurchasesFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[DEVELOPER_MOCK_PURCHASES] ?: false

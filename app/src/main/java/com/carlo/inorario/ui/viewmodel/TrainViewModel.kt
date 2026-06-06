@@ -273,10 +273,8 @@ class TrainViewModel(
                 val notifyStationPass = trainPref?.notifyStationPass ?: false
                 val stationPassName = trainPref?.stationPassName.orEmpty()
 
-                val hasCap = dataStoreManager.hasCappuccinoFlow.first()
-                val hasCol = dataStoreManager.hasColazioneFlow.first()
                 val region = dataStoreManager.strikeRegionFlow.first()
-                val limit = if (hasCol) 99 else (if (hasCap) 3 else 1)
+                val limit = 99
                 val payload = JSONObject().apply {
                     put("token", token)
                     put("platform", "android")
@@ -300,7 +298,7 @@ class TrainViewModel(
                         android.util.Log.d("TrainViewModel", "Registrato treno $trainNumber per push")
                     } else if (response.code == 403) {
                         android.util.Log.e("TrainViewModel", "Errore registrazione push: limite raggiunto (403)")
-                        _notificationLimitError.value = "Puoi monitorare al massimo $limit treno/i alla volta per il tuo livello."
+                        _notificationLimitError.value = "Limite massimo di treni monitorati raggiunto. Riprova più tardi."
                     } else {
                         android.util.Log.e("TrainViewModel", "Errore registrazione push: ${response.code}")
                     }
