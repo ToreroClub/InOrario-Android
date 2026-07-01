@@ -35,6 +35,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -90,16 +93,13 @@ fun StationBoardScreen(
     val homeDestinationName by trainViewModel.homeDestinationStationName.collectAsState()
 
     val isMyStation = myStations.any { it.vtID == station.vtID }
-    val isPassanteDirectional = trainViewModel.normalizeStationName(station.name).let { name ->
-        name.contains("lancetti") || name.contains("garibaldi") ||
-                name.contains("repubblica") || name.contains("venezia") ||
-                name.contains("dateo") || name.contains("vittoria")
-    }
+    val isPassanteDirectional = false
 
     // Auto-refresh timer simulated
     LaunchedEffect(key1 = station.id, key2 = showingDepartures) {
-        trainViewModel.fetchTrains(station)
-        trainViewModel.startAutoRefresh(station)
+        trainViewModel.addToViewedRecentStations(station)
+        trainViewModel.fetchTrains(station, isDepartures = showingDepartures)
+        trainViewModel.startAutoRefresh(station, isDepartures = showingDepartures)
     }
 
     // Handle timer for metro countdown updates
@@ -128,19 +128,26 @@ fun StationBoardScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = station.name,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp
-                    )
+                    // Large iOS-style station name
+                    Column {
+                        Text(
+                            text = station.name,
+                            style = MaterialTheme.typography.displayMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            maxLines = 2
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Indietro")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Indietro",
+                            tint = MaterialTheme.colorScheme.onBackground
+                        )
                     }
                 },
                 actions = {
-                    // Star toggle for station favorites
                     IconButton(
                         onClick = {
                             if (isMyStation) {
@@ -156,18 +163,21 @@ fun StationBoardScreen(
                             tint = if (isMyStation) Color(0xFFFFCC00) else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-
-                    // Refresh manual
                     IconButton(
-                        onClick = { trainViewModel.fetchTrains(station) },
+                        onClick = { trainViewModel.fetchTrains(station, isDepartures = showingDepartures) },
                         enabled = !isLoading
                     ) {
-                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "Aggiorna")
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Aggiorna",
+                            tint = MaterialTheme.colorScheme.onBackground
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
-                )
+                ),
+                expandedHeight = 104.dp
             )
         }
     ) { innerPadding ->
@@ -177,7 +187,7 @@ fun StationBoardScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .padding(innerPadding)
         ) {
-            // Header control bar (P/A or Ovest/Est)
+            // ── FISSO: source label + segmented buttons (non scorrono) ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -186,17 +196,28 @@ fun StationBoardScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = if (useRfi) "Tabellone RFI" else "Tabellone ViaggiaTreno",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
+                    text = if (useRfi) "Treni RFI" else "ViaggiaTreno",
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                if (isPassanteDirectional) {
-                    // Ovest/Est selector
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
+                if (!isPassanteDirectional) {
+                    SingleChoiceSegmentedButtonRow {
+                        SegmentedButton(
+                            selected = showingDepartures,
+                            onClick = { showingDepartures = true },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                            label = { Text("Partenze", style = MaterialTheme.typography.labelMedium) }
+                        )
+                        SegmentedButton(
+                            selected = !showingDepartures,
+                            onClick = { showingDepartures = false },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                            label = { Text("Arrivi", style = MaterialTheme.typography.labelMedium) }
+                        )
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         DirectionButton(
                             text = "← Bovisa/Rho",
                             isSelected = selectedPassanteDirection == "Ovest"
@@ -206,218 +227,199 @@ fun StationBoardScreen(
                             isSelected = selectedPassanteDirection == "Est"
                         ) { selectedPassanteDirection = "Est" }
                     }
-                } else {
-                    // Arrivals / Departures selector
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CircularTabButton(
-                            text = "P",
-                            isSelected = showingDepartures,
-                            onClick = { showingDepartures = true }
-                        )
-                        CircularTabButton(
-                            text = "A",
-                            isSelected = !showingDepartures,
-                            onClick = { showingDepartures = false }
-                        )
-                    }
                 }
             }
 
-            // Alerts / Health bar
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    .padding(12.dp)
-            ) {
-                // Line health state
-                val healthColor = getLineHealthColor(filteredTrains)
-                val healthMsg = getLineHealthMessage(filteredTrains)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(10.dp)
-                                .clip(CircleShape)
-                                .background(healthColor)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = healthMsg,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = healthColor
-                        )
-                    }
+            // ── SCROLL UNICO: avvisi + metro + treni scrollano insieme ──
+            val allSchedules by metroViewModel.allSchedules.collectAsState()
+            val isOfflineMode by metroViewModel.isOfflineMode.collectAsState()
 
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    } else if ((stationAlerts != null) && !isAlertExpanded) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = Color(0xFFFF9500),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-
-                // Station specific alert details
-                stationAlerts?.let { alerts ->
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { isAlertExpanded = !isAlertExpanded }
-                            .padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Warning,
-                                contentDescription = null,
-                                tint = Color(0xFFFF9500),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Avvisi della Stazione",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        Icon(
-                            imageVector = if (isAlertExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    AnimatedVisibility(visible = isAlertExpanded) {
-                        Text(
-                            text = alerts,
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(top = 6.dp)
-                        )
-                    }
-                }
-            }
-
-            // Metro Accordion card
-            if (station.metroLines.isNotEmpty()) {
-                val allSchedules by metroViewModel.allSchedules.collectAsState()
-                val isOfflineMode by metroViewModel.isOfflineMode.collectAsState()
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                        .animateContentSize()
-                        .padding(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { isMetroExpanded = !isMetroExpanded },
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Subway,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Metropolitana",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        Icon(
-                            imageVector = if (isMetroExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-
-                    AnimatedVisibility(visible = isMetroExpanded) {
-                        Column(
-                            modifier = Modifier.padding(top = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            station.metroLines.forEach { metro ->
-                                val cacheKey = "${metro.pdfID.orEmpty()}_${metro.direction}"
-                                val isOffline = isOfflineMode[cacheKey] ?: false
-                                val loaded = allSchedules[cacheKey] != null
-                                val mode = metroViewModel.getNextDepartures(metro, currentTime)
-
-                                MetroRowView(
-                                    metro = metro,
-                                    isOffline = isOffline,
-                                    scheduleLoaded = loaded,
-                                    displayMode = mode,
-                                    onSyncRequested = {
-                                        metro.pdfID?.let {
-                                            metroViewModel.syncMetroSchedule(
-                                                metroName = metro.name,
-                                                pdfID = it,
-                                                direction = metro.direction
-                                            )
-                                        }
-                                    },
-                                    onClick = { onMetroClick(metro) }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            // Trains list
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                item {
+                // Card Avvisi / Salute linea
+                item(key = "alerts") {
+                    val healthColor = getLineHealthColor(filteredTrains)
+                    val healthMsg = getLineHealthMessage(filteredTrains)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .animateContentSize()
+                            .padding(12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(healthColor)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = healthMsg,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = healthColor
+                                )
+                            }
+
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            } else if ((stationAlerts != null) && !isAlertExpanded) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFF9500),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+
+                        stationAlerts?.let { alerts ->
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { isAlertExpanded = !isAlertExpanded }
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFF9500),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Avvisi della Stazione",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                Icon(
+                                    imageVector = if (isAlertExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
+                            AnimatedVisibility(visible = isAlertExpanded) {
+                                Text(
+                                    text = alerts,
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(top = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Card Metropolitana (solo se presenti linee)
+                if (station.metroLines.isNotEmpty()) {
+                    item(key = "metro") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .animateContentSize()
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { isMetroExpanded = !isMetroExpanded },
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Subway,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Metropolitana",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                Icon(
+                                    imageVector = if (isMetroExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
+                            AnimatedVisibility(visible = isMetroExpanded) {
+                                Column(
+                                    modifier = Modifier.padding(top = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    station.metroLines.forEach { metro ->
+                                        val lineCode = metro.name.take(2)
+                                        val cacheKey = "${lineCode}_${metro.pdfID.orEmpty()}_${metro.direction}_"
+                                        val isOffline = isOfflineMode[cacheKey] ?: false
+                                        val loaded = allSchedules[cacheKey] != null
+                                        val mode = metroViewModel.getNextDepartures(metro, currentTime)
+
+                                        MetroRowView(
+                                            metro = metro,
+                                            isOffline = isOffline,
+                                            scheduleLoaded = loaded,
+                                            displayMode = mode,
+                                            onSyncRequested = {
+                                                metro.pdfID?.let {
+                                                    metroViewModel.syncLiveDepartures(
+                                                        metroName = metro.name,
+                                                        pdfID = it,
+                                                        direction = metro.direction
+                                                    )
+                                                }
+                                            },
+                                            onClick = null
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Intestazione lista treni
+                item(key = "trains_header") {
                     Text(
-                        text = "TRENI IN PARTENZA",
+                        text = if (showingDepartures) "TRENI IN PARTENZA" else "TRENI IN ARRIVO",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -425,8 +427,9 @@ fun StationBoardScreen(
                     )
                 }
 
+                // Treni
                 if (isLoading && filteredTrains.isEmpty()) {
-                    item {
+                    item(key = "loading") {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -437,7 +440,7 @@ fun StationBoardScreen(
                         }
                     }
                 } else if (filteredTrains.isEmpty()) {
-                    item {
+                    item(key = "empty") {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -445,7 +448,7 @@ fun StationBoardScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Nessun treno in partenza.",
+                                text = "Nessun treno trovato.",
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
@@ -453,7 +456,7 @@ fun StationBoardScreen(
                         }
                     }
                 } else {
-                    items(filteredTrains) { train ->
+                    items(filteredTrains, key = { it.number + it.time }) { train ->
                         val isCentralPassante = trainViewModel.normalizeStationName(station.name).let { name ->
                             name.contains("villapizzone") || name.contains("garibaldi") ||
                                     name.contains("repubblica") || name.contains("venezia") ||
@@ -483,6 +486,10 @@ fun StationBoardScreen(
                             thickness = 0.5.dp
                         )
                     }
+                }
+
+                item(key = "bottom_spacer") {
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         }

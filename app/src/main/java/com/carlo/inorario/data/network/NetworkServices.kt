@@ -1,7 +1,8 @@
 package com.carlo.inorario.data.network
 
-import com.carlo.inorario.data.model.FullSchedule
+
 import com.carlo.inorario.data.model.NewsItem
+import com.carlo.inorario.data.model.MetroDeparturesResponse
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody
 import okhttp3.ResponseBody
@@ -43,14 +44,26 @@ interface ViaggiaTrenoService {
 
 interface BackendService {
     @GET("news")
-    suspend fun getNews(): List<NewsItem>
+    suspend fun getNews(@Query("region") region: String?): List<NewsItem>
 
-    @GET("metro/pdf/{line}/{pdfID}")
-    suspend fun getMetroSchedule(
+
+    @GET("metro/departures/{line}/{pdfID}")
+    suspend fun getMetroDepartures(
         @Path("line") line: String,
         @Path("pdfID") pdfID: String,
-        @Query("direction") direction: Int
-    ): FullSchedule
+        @Query("direction") direction: Int,
+        @Query("time") time: String? = null
+    ): MetroDeparturesResponse
+
+    @GET("trains/{trainNumber}/reports")
+    suspend fun getComfortReports(
+        @Path("trainNumber") trainNumber: String
+    ): Response<ResponseBody>
+
+    @POST("trains/report")
+    suspend fun postComfortReport(
+        @Body body: RequestBody
+    ): Response<ResponseBody>
 
     @POST("feedback")
     suspend fun sendFeedback(@Body body: RequestBody): Response<ResponseBody>

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.carlo.inorario.MainActivity
 import com.carlo.inorario.R
 import com.carlo.inorario.data.local.DataStoreManager
@@ -71,7 +72,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         )
 
         val notificationBuilder = NotificationCompat.Builder(this, channelId)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setColor(ContextCompat.getColor(this, R.color.brand_orange))
             .setContentTitle(title)
             .setContentText(body)
             .setAutoCancel(true)

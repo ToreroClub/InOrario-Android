@@ -11,7 +11,8 @@ data class NewsItem(
     val title: String,
     val content: String,
     val isUrgent: Boolean,
-    val category: String? = null
+    val category: String? = null,
+    val date: String? = null
 )
 
 enum class DayType {
@@ -33,9 +34,13 @@ enum class DayType {
     }
 }
 
-data class MetroDeparture(
-    val min: Int,
-    val color: String
+data class MetroDepartureItem(
+    val time: String,
+    val destination: String
+)
+
+data class MetroDeparturesResponse(
+    val departures: List<MetroDepartureItem>
 )
 
 data class FormattedDeparture(
@@ -48,14 +53,6 @@ sealed class MetroDisplayMode {
     data class Frequency(val text: String) : MetroDisplayMode()
     object Closed : MetroDisplayMode()
 }
-
-data class FullSchedule(
-    val feriali: Map<Int, List<MetroDeparture>> = emptyMap(),
-    val sabato: Map<Int, List<MetroDeparture>> = emptyMap(),
-    val festivo: Map<Int, List<MetroDeparture>> = emptyMap(),
-    val frequenze: Map<String, String> = emptyMap(),
-    val lastSyncDate: Date? = null
-)
 
 data class MetroLine(
     val name: String,
@@ -75,7 +72,11 @@ data class SavedTrain(
     val notifyDelay: Boolean = false,
     val notifyDeparture: Boolean = false,
     val notifyStationPass: Boolean = false,
-    val stationPassName: String? = null
+    val stationPassName: String? = null,
+    val activeDays: List<Int>? = null,
+    val lastNotifiedPlatform: String? = null,
+    val notifyPlatformChange: Boolean = false,
+    val platformChangeStationName: String? = null
 )
 
 data class VTSearchStation(
@@ -93,7 +94,9 @@ data class TrenitaliaLocation(
 data class RFIStation(
     val name: String,
     @SerializedName("id") val rfiID: String?,
-    val vtID: String?
+    val vtID: String?,
+    val lat: Double? = null,
+    val lon: Double? = null
 )
 
 data class Train(
@@ -192,108 +195,83 @@ data class Station(
     val id: String = rfiID ?: vtID ?: name
 
     val metroLines: List<MetroLine>
-        get() = when (name) {
-            "Rho Fiera" -> listOf(
-                MetroLine(
-                    name = "M1 Sesto",
-                    colorName = "red",
-                    pdfID = "504",
-                    direction = 0,
-                    customFrequencies = mapOf(
-                        DayType.FERIALI to "Ogni 4' - 9'",
-                        DayType.SABATO to "Ogni 7' - 9'",
-                    )
+        get() {
+            val upperName = name.uppercase()
+            return when {
+                upperName.contains("RHO FIERA") -> listOf(
+                    MetroLine("M1 Sesto", "red", "RHO FIERAMILANO", 0)
                 )
-            )
-            "Porta Garibaldi", "P. Garibaldi Passante" -> listOf(
-                MetroLine(
-                    name = "M2 Nord",
-                    colorName = "green",
-                    pdfID = "682",
-                    direction = 0,
-                    customFrequencies = mapOf(
-                        DayType.FERIALI to "Gobba: 2'-4'   Gessate: 5'-12'   Cologno: 5'-12'",
-                        DayType.SABATO to "Gobba: 5'   Gessate: 10'-12'   Cologno: 10'",
-                    ),
-                    destinations = mapOf("orange" to "Gessate", "blue" to "Cologno N.", "black" to "C. Gobba")
-                ),
-                MetroLine(
-                    name = "M2 Sud",
-                    colorName = "green",
-                    pdfID = "682",
-                    direction = 1,
-                    customFrequencies = mapOf(
-                        DayType.FERIALI to "Famagosta: 2'-4'   Abbiategrasso: 5'-7'   Assago: 5'-12'",
-                        DayType.SABATO to "Famagosta: 4'-5'   Abbiategrasso: 9'-10'   Assago: 10'-11'",
-                    ),
-                    destinations = mapOf("orange" to "Assago", "blue" to "Abbiategrasso", "black" to "Famagosta")
-                ),
-                MetroLine("M5 Bignami", "purple", "308", 0),
-                MetroLine("M5 San Siro", "purple", "308", 1)
-            )
-            "Milano Centrale" -> listOf(
-                MetroLine(
-                    name = "M2 Nord",
-                    colorName = "green",
-                    pdfID = "680",
-                    direction = 0,
-                    customFrequencies = mapOf(
-                        DayType.FERIALI to "Gobba: 2'-4'   Gessate: 5'-12'   Cologno: 5'-12'",
-                        DayType.SABATO to "Gobba: 5'   Gessate: 10'-12'   Cologno: 10'",
-                    ),
-                    destinations = mapOf("orange" to "Gessate", "blue" to "Cologno N.", "black" to "C. Gobba")
-                ),
-                MetroLine(
-                    name = "M2 Sud",
-                    colorName = "green",
-                    pdfID = "680",
-                    direction = 1,
-                    customFrequencies = mapOf(
-                        DayType.FERIALI to "Famagosta: 2'-4'   Abbiategrasso: 5'-7'   Assago: 5'-12'",
-                        DayType.SABATO to "Famagosta: 4'-5'   Abbiategrasso: 9'-10'   Assago: 10'-11'",
-                    ),
-                    destinations = mapOf("orange" to "Assago", "blue" to "Abbiategrasso", "black" to "Famagosta")
-                ),
-                MetroLine("M3 S. Donato", "yellow", "731", 0),
-                MetroLine("M3 Comasina", "yellow", "731", 1)
-            )
-            "Repubblica" -> listOf(
-                MetroLine("M3 S. Donato", "yellow", "732", 0),
-                MetroLine("M3 Comasina", "yellow", "732", 1)
-            )
-            "Porta Venezia" -> listOf(
-                MetroLine(
-                    name = "M1 Rho/Bisc.",
-                    colorName = "red",
-                    pdfID = "536",
-                    direction = 1,
-                    customFrequencies = mapOf(
-                        DayType.FERIALI to "Pagano: 2'-4'   Rho: 4'-11'   Bisceglie: 4'-8'",
-                        DayType.SABATO to "Pagano: 3'-5'   Rho: 7'-9'   Bisceglie: 7'-11'",
-                    ),
-                    destinations = mapOf("orange" to "Rho Fiera", "blue" to "Bisceglie", "black" to "Pagano")
-                ),
-                MetroLine(
-                    name = "M1 Sesto",
-                    colorName = "red",
-                    pdfID = "536",
-                    direction = 0,
-                    customFrequencies = mapOf(
-                        DayType.FERIALI to "Ogni 2' - 3'",
-                        DayType.SABATO to "Ogni 3' - 4'",
-                        DayType.FESTIVO to "Ogni 5' - 8'",
-                    )
+                upperName.contains("GARIBALDI") -> listOf(
+                    MetroLine("M2 Nord", "green", "GARIBALDI FS", 0),
+                    MetroLine("M2 Sud", "green", "GARIBALDI FS", 1),
+                    MetroLine("M5 Bignami", "purple", "GARIBALDI FS", 0),
+                    MetroLine("M5 San Siro", "purple", "GARIBALDI FS", 1)
                 )
-            )
-            "Dateo" -> listOf(
-                MetroLine("M4 S. Cristoforo", "blue", "336", 0),
-                MetroLine("M4 Linate", "blue", "336", 1)
-            )
-            "Forlanini" -> listOf(
-                MetroLine("M4 S. Cristoforo", "blue", "339", 0),
-                MetroLine("M4 Linate", "blue", "339", 1)
-            )
-            else -> emptyList()
+                upperName.contains("CENTRALE") -> listOf(
+                    MetroLine("M2 Nord", "green", "CENTRALE FS", 0),
+                    MetroLine("M2 Sud", "green", "CENTRALE FS", 1),
+                    MetroLine("M3 S. Donato", "yellow", "CENTRALE FS", 0),
+                    MetroLine("M3 Comasina", "yellow", "CENTRALE FS", 1)
+                )
+                upperName.contains("REPUBBLICA") -> listOf(
+                    MetroLine("M3 S. Donato", "yellow", "REPUBBLICA", 0),
+                    MetroLine("M3 Comasina", "yellow", "REPUBBLICA", 1)
+                )
+                upperName.contains("VENEZIA") -> listOf(
+                    MetroLine("M1 Sesto", "red", "P.TA VENEZIA", 0),
+                    MetroLine("M1 Rho/Bisc.", "red", "P.TA VENEZIA", 1)
+                )
+                upperName.contains("DATEO") -> listOf(
+                    MetroLine("M4 S. Cristoforo", "blue", "DATEO", 0),
+                    MetroLine("M4 Linate", "blue", "DATEO", 1)
+                )
+                upperName.contains("FORLANINI") -> listOf(
+                    MetroLine("M4 S. Cristoforo", "blue", "STAZIONE FORLANINI", 0),
+                    MetroLine("M4 Linate", "blue", "STAZIONE FORLANINI", 1)
+                )
+                upperName.contains("SESTO S") || upperName.contains("SESTO SAN GIOVANNI") -> listOf(
+                    MetroLine("M1 Rho/Bisc.", "red", "SESTO 1 MAGGIO FS", 1)
+                )
+                upperName.contains("CADORNA") -> listOf(
+                    MetroLine("M1 Sesto", "red", "CADORNA FN M1", 0),
+                    MetroLine("M1 Rho/Bisc.", "red", "CADORNA FN M1", 1),
+                    MetroLine("M2 Nord", "green", "CADORNA FN M2", 0),
+                    MetroLine("M2 Sud", "green", "CADORNA FN M2", 1)
+                )
+                upperName.contains("LAMBRATE") -> listOf(
+                    MetroLine("M2 Nord", "green", "LAMBRATE FS", 0),
+                    MetroLine("M2 Sud", "green", "LAMBRATE FS", 1)
+                )
+                upperName.contains("GENOVA") -> listOf(
+                    MetroLine("M2 Nord", "green", "PORTA GENOVA FS", 0),
+                    MetroLine("M2 Sud", "green", "PORTA GENOVA FS", 1)
+                )
+                upperName.contains("ROMOLO") -> listOf(
+                    MetroLine("M2 Nord", "green", "ROMOLO", 0),
+                    MetroLine("M2 Sud", "green", "ROMOLO", 1)
+                )
+                upperName.contains("AFFORI") -> listOf(
+                    MetroLine("M3 S. Donato", "yellow", "AFFORI FN", 0),
+                    MetroLine("M3 Comasina", "yellow", "AFFORI FN", 1)
+                )
+                upperName.contains("ROMANA") -> listOf(
+                    MetroLine("M3 S. Donato", "yellow", "PORTA ROMANA", 0),
+                    MetroLine("M3 Comasina", "yellow", "PORTA ROMANA", 1)
+                )
+                upperName.contains("ROGOREDO") -> listOf(
+                    MetroLine("M3 S. Donato", "yellow", "ROGOREDO FS", 0),
+                    MetroLine("M3 Comasina", "yellow", "ROGOREDO FS", 1)
+                )
+                upperName.contains("CRISTOFORO") -> listOf(
+                    MetroLine("M4 S. Cristoforo", "blue", "SAN CRISTOFORO FS", 0),
+                    MetroLine("M4 Linate", "blue", "SAN CRISTOFORO FS", 1)
+                )
+                upperName.contains("DOMODOSSOLA") -> listOf(
+                    MetroLine("M5 Bignami", "purple", "DOMODOSSOLA FN", 0),
+                    MetroLine("M5 San Siro", "purple", "DOMODOSSOLA FN", 1)
+                )
+                else -> emptyList()
+            }
         }
 }
 

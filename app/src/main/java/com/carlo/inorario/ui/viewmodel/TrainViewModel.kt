@@ -27,6 +27,9 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -68,6 +71,12 @@ class TrainViewModel(
 
     private val _currentTrainStatus = MutableStateFlow(TrainStatus())
     val currentTrainStatus = _currentTrainStatus.asStateFlow()
+
+    private val _currentTrainReports = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val currentTrainReports = _currentTrainReports.asStateFlow()
+
+    private val _currentTrainBlockedLocations = MutableStateFlow<List<String>>(emptyList())
+    val currentTrainBlockedLocations = _currentTrainBlockedLocations.asStateFlow()
 
     private val _searchResults = MutableStateFlow<List<SavedTrain>>(emptyList())
     val searchResults = _searchResults.asStateFlow()
@@ -143,20 +152,72 @@ class TrainViewModel(
     val homeDestinationStationName = dataStoreManager.homeDestinationStationNameFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
+    val recentTrains = dataStoreManager.recentTrainsFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val recentStations = dataStoreManager.recentStationsFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val recentTravelLocations = dataStoreManager.recentTravelLocationsFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val viewedRecentTrains = dataStoreManager.viewedRecentTrainsFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val viewedRecentStations = dataStoreManager.viewedRecentStationsFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     val smartRoutes = dataStoreManager.smartRoutesFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, listOf(SuburbanRoute("Magenta", "Milano Bovisa")))
 
     val collapsedSections = dataStoreManager.collapsedSectionsFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
-    val developerMockPurchases = dataStoreManager.developerMockPurchasesFlow
+    val hasSupport = dataStoreManager.hasSupportFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val rememberSectionState = dataStoreManager.rememberSectionStateFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    // --- Temporary state for passing search date from UI ---
+    var tempSearchDate: Date? = null
 
     // --- Auto Refresh Job ---
     private var refreshJob: Job? = null
 
     init {
         loadRFIStations()
+        checkAndCleanOneShotNotifications()
+        
+        // Restore sections state based on remember toggles
+        viewModelScope.launch {
+            val rememberStates = dataStoreManager.rememberSectionStateFlow.first()
+            val currentCollapsed = dataStoreManager.collapsedSectionsFlow.first().toMutableSet()
+            var changed = false
+            
+            for (section in AppSection.entries) {
+                // If not in map, fallback to defaults: PASSANTE false, others true
+                val defaultRemember = section != AppSection.PASSANTE
+                val remember = rememberStates[section.name] ?: defaultRemember
+                
+                if (!remember) {
+                    if (section == AppSection.PASSANTE) {
+                        if (!currentCollapsed.contains(section.name)) {
+                            currentCollapsed.add(section.name)
+                            changed = true
+                        }
+                    } else {
+                        if (currentCollapsed.contains(section.name)) {
+                            currentCollapsed.remove(section.name)
+                            changed = true
+                        }
+                    }
+                }
+            }
+            if (changed) {
+                dataStoreManager.saveCollapsedSections(currentCollapsed)
+            }
+        }
     }
 
     private fun loadRFIStations() {
@@ -219,32 +280,58 @@ class TrainViewModel(
                 val origin = stopsResult.stops.firstOrNull()?.stationName ?: ""
                 val departureTime = stopsResult.stops.firstOrNull()?.time ?: ""
                 val arrivalTime = stopsResult.stops.lastOrNull()?.time ?: ""
-                list.add(SavedTrain(trainNumber, cleanDesc, origin = origin, departureTime = departureTime, arrivalTime = arrivalTime))
+                list.add(SavedTrain(trainNumber, cleanDesc, origin = origin, departureTime = departureTime, arrivalTime = arrivalTime, notifyDelay = false))
                 true
             }
             dataStoreManager.saveFavoriteTrains(list)
             
             // Sync with remote server if notifications are enabled
             val isEnabled = dataStoreManager.remoteNotificationsEnabledFlow.first()
-            val token = dataStoreManager.fcmTokenFlow.first()
-            if (isEnabled && token.isNotEmpty()) {
-                if (added) {
-                    registerTrainForPush(trainNumber, token)
+            if (isEnabled) {
+                val token = getOrFetchFcmToken()
+                if (token.isNotEmpty()) {
+                    if (added) {
+                        // Do not register automatically for push notifications; notifications are manual per-train
+                    } else {
+                        // Always unregister from push notifications if removed from favorites
+                        unregisterTrainForPush(trainNumber, token)
+                    }
                 } else {
-                    unregisterTrainForPush(trainNumber, token)
+                    android.util.Log.w("TrainViewModel", "Impossibile sincronizzare la rimozione push: token vuoto.")
                 }
             }
+        }
+    }
+
+    private suspend fun getOrFetchFcmToken(): String {
+        val stored = dataStoreManager.fcmTokenFlow.first()
+        if (stored.isNotEmpty()) return stored
+        return try {
+            val token = com.google.android.gms.tasks.Tasks.await(
+                com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+            )
+            if (token.isNotEmpty()) {
+                dataStoreManager.saveFcmToken(token)
+                android.util.Log.d("TrainViewModel", "Token FCM recuperato on-demand: $token")
+            }
+            token
+        } catch (e: Exception) {
+            android.util.Log.e("TrainViewModel", "Errore recupero token FCM on-demand", e)
+            ""
         }
     }
 
     fun registerDeviceForStrikes(token: String) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val region = dataStoreManager.strikeRegionFlow.first()
+                val isPremium = dataStoreManager.hasSupportFlow.first()
+                val region = if (isPremium) dataStoreManager.strikeRegionFlow.first() else "Tutte"
+                val strikeEnabled = dataStoreManager.strikeNotificationsEnabledFlow.first()
                 val payload = JSONObject().apply {
                     put("token", token)
                     put("platform", "android")
                     put("strike_region", region)
+                    put("strike_enabled", strikeEnabled)
                 }
                 val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
                 val request = okhttp3.Request.Builder()
@@ -253,13 +340,13 @@ class TrainViewModel(
                     .build()
                 okhttp3.OkHttpClient().newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
-                        android.util.Log.d("TrainViewModel", "Dispositivo registrato per scioperi con regione: $region")
+                        android.util.Log.d("TrainViewModel", "Dispositivo registrato per scioperi con regione: $region, enabled: $strikeEnabled")
                     } else {
                         android.util.Log.e("TrainViewModel", "Errore registrazione dispositivo scioperi: ${response.code}")
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.e("TrainViewModel", "Errore durante la registrazione del dispositivo per gli scioperi", e)
             }
         }
     }
@@ -273,8 +360,10 @@ class TrainViewModel(
                 val notifyStationPass = trainPref?.notifyStationPass ?: false
                 val stationPassName = trainPref?.stationPassName.orEmpty()
 
-                val region = dataStoreManager.strikeRegionFlow.first()
-                val limit = 99
+                val isPremium = dataStoreManager.hasSupportFlow.first()
+                val region = if (isPremium) dataStoreManager.strikeRegionFlow.first() else "Tutte"
+                val strikeEnabled = dataStoreManager.strikeNotificationsEnabledFlow.first()
+                val limit = if (isPremium) 10 else 1
                 val payload = JSONObject().apply {
                     put("token", token)
                     put("platform", "android")
@@ -282,9 +371,17 @@ class TrainViewModel(
                     put("notify_delay", notifyDelay)
                     put("notify_departure", notifyDeparture)
                     put("notify_station_pass", notifyStationPass)
-                    put("station_pass_name", stationPassName)
+                    put("station_pass_name", stationPassName ?: JSONObject.NULL)
+                    
+                    val activeDaysArr = JSONArray()
+                    trainPref?.activeDays?.forEach { activeDaysArr.put(it) }
+                    put("active_days", activeDaysArr)
+                    put("notify_platform_change", trainPref?.notifyPlatformChange ?: false)
+                    put("platform_change_station_name", trainPref?.platformChangeStationName ?: JSONObject.NULL)
+
                     put("limit", limit)
                     put("strike_region", region)
+                    put("strike_enabled", strikeEnabled)
                     put("departure_time", trainPref?.departureTime.orEmpty())
                     put("arrival_time", trainPref?.arrivalTime.orEmpty())
                 }
@@ -304,7 +401,7 @@ class TrainViewModel(
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.e("TrainViewModel", "Errore durante la registrazione del treno per push", e)
             }
         }
     }
@@ -329,26 +426,31 @@ class TrainViewModel(
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                android.util.Log.e("TrainViewModel", "Errore durante la rimozione del treno da push", e)
             }
         }
     }
 
-    fun syncRemoteNotifications(enabled: Boolean, token: String) {
+    fun syncRemoteNotifications(enabled: Boolean, token: String? = null) {
         viewModelScope.launch(Dispatchers.IO) {
+            val activeToken = if (token != null && token.isNotEmpty()) token else getOrFetchFcmToken()
+            if (activeToken.isEmpty()) {
+                android.util.Log.w("TrainViewModel", "Impossibile sincronizzare le notifiche: token FCM vuoto.")
+                return@launch
+            }
             val trains = favoriteTrains.value
-            if (enabled && token.isNotEmpty()) {
-                registerDeviceForStrikes(token)
+            if (enabled) {
+                registerDeviceForStrikes(activeToken)
                 for (train in trains) {
                     if (train.notifyDelay) {
-                        registerTrainForPush(train.number, token)
+                        registerTrainForPush(train.number, activeToken)
                     } else {
-                        unregisterTrainForPush(train.number, token)
+                        unregisterTrainForPush(train.number, activeToken)
                     }
                 }
-            } else if (token.isNotEmpty()) {
+            } else {
                 for (train in trains) {
-                    unregisterTrainForPush(train.number, token)
+                    unregisterTrainForPush(train.number, activeToken)
                 }
             }
         }
@@ -359,29 +461,62 @@ class TrainViewModel(
         notifyDelay: Boolean,
         notifyDeparture: Boolean,
         notifyStationPass: Boolean,
-        stationPassName: String?
+        stationPassName: String?,
+        activeDays: List<Int>? = null,
+        notifyPlatformChange: Boolean = false,
+        platformChangeStationName: String? = null
     ) {
         viewModelScope.launch {
-            val list = favoriteTrains.value.toMutableList()
+            var list = favoriteTrains.value.toMutableList()
+
+            if (notifyDelay) {
+                val isPremium = dataStoreManager.hasSupportFlow.first()
+                if (!isPremium) {
+                    val token = getOrFetchFcmToken()
+                    list = list.map {
+                        if (it.number != trainNumber && it.notifyDelay) {
+                            if (token.isNotEmpty()) {
+                                unregisterTrainForPush(it.number, token)
+                            }
+                            it.copy(
+                                notifyDelay = false,
+                                notifyDeparture = false,
+                                notifyStationPass = false,
+                                stationPassName = null
+                            )
+                        } else {
+                            it
+                        }
+                    }.toMutableList()
+                }
+            }
+
             val index = list.indexOfFirst { it.number == trainNumber }
             if (index != -1) {
                 val updated = list[index].copy(
                     notifyDelay = notifyDelay,
                     notifyDeparture = if (notifyDelay) notifyDeparture else false,
                     notifyStationPass = if (notifyDelay) notifyStationPass else false,
-                    stationPassName = if (notifyDelay && notifyStationPass) stationPassName else null
+                    stationPassName = if (notifyDelay && notifyStationPass) stationPassName else null,
+                    activeDays = activeDays,
+                    notifyPlatformChange = notifyPlatformChange,
+                    platformChangeStationName = platformChangeStationName
                 )
                 list[index] = updated
                 dataStoreManager.saveFavoriteTrains(list)
 
                 // Sync with remote server if notifications are enabled
                 val isEnabled = dataStoreManager.remoteNotificationsEnabledFlow.first()
-                val token = dataStoreManager.fcmTokenFlow.first()
-                if (isEnabled && token.isNotEmpty()) {
-                    if (notifyDelay) {
-                        registerTrainForPush(trainNumber, token)
+                if (isEnabled) {
+                    val token = getOrFetchFcmToken()
+                    if (token.isNotEmpty()) {
+                        if (notifyDelay) {
+                            registerTrainForPush(trainNumber, token)
+                        } else {
+                            unregisterTrainForPush(trainNumber, token)
+                        }
                     } else {
-                        unregisterTrainForPush(trainNumber, token)
+                        android.util.Log.w("TrainViewModel", "Impossibile sincronizzare la notifica del treno: token vuoto.")
                     }
                 }
             }
@@ -437,16 +572,6 @@ class TrainViewModel(
         }
     }
 
-    fun saveDeveloperMockPurchases(value: Boolean) {
-        viewModelScope.launch {
-            dataStoreManager.saveDeveloperMockPurchases(value)
-            
-            // Sync remote notifications immediately so limitations are updated on the server
-            val isEnabled = dataStoreManager.remoteNotificationsEnabledFlow.first()
-            val token = dataStoreManager.fcmTokenFlow.first()
-            syncRemoteNotifications(isEnabled, token)
-        }
-    }
 
     fun isFavorite(trainNumber: String): Boolean {
         return favoriteTrains.value.any { it.number == trainNumber }
@@ -533,6 +658,96 @@ class TrainViewModel(
         }
     }
 
+    fun addToRecentTrains(train: SavedTrain) {
+        viewModelScope.launch {
+            val list = recentTrains.value.toMutableList()
+            list.removeAll { it.number == train.number }
+            list.add(0, train)
+            if (list.size > 10) {
+                list.removeAt(list.lastIndex)
+            }
+            dataStoreManager.saveRecentTrains(list)
+        }
+    }
+
+    fun addToRecentStations(station: Station) {
+        viewModelScope.launch {
+            val list = recentStations.value.toMutableList()
+            list.removeAll { it.vtID == station.vtID || (it.rfiID != null && it.rfiID == station.rfiID) }
+            list.add(0, station)
+            if (list.size > 10) {
+                list.removeAt(list.lastIndex)
+            }
+            dataStoreManager.saveRecentStations(list)
+        }
+    }
+
+    fun clearRecentTrains() {
+        viewModelScope.launch {
+            dataStoreManager.saveRecentTrains(emptyList())
+        }
+    }
+
+    fun clearRecentStations() {
+        viewModelScope.launch {
+            dataStoreManager.saveRecentStations(emptyList())
+        }
+    }
+
+    fun addToRecentTravelLocations(location: TrenitaliaLocation) {
+        viewModelScope.launch {
+            val list = recentTravelLocations.value.toMutableList()
+            list.removeAll { it.id == location.id }
+            list.add(0, location)
+            if (list.size > 10) {
+                list.removeAt(list.lastIndex)
+            }
+            dataStoreManager.saveRecentTravelLocations(list)
+        }
+    }
+
+    fun clearRecentTravelLocations() {
+        viewModelScope.launch {
+            dataStoreManager.saveRecentTravelLocations(emptyList())
+        }
+    }
+
+    fun addToViewedRecentTrains(train: SavedTrain) {
+        viewModelScope.launch {
+            val list = viewedRecentTrains.value.toMutableList()
+            list.removeAll { it.number == train.number }
+            list.add(0, train)
+            if (list.size > 10) {
+                list.removeAt(list.lastIndex)
+            }
+            dataStoreManager.saveViewedRecentTrains(list)
+        }
+    }
+
+    fun addToViewedRecentStations(station: Station) {
+        viewModelScope.launch {
+            val list = viewedRecentStations.value.toMutableList()
+            list.removeAll { it.vtID == station.vtID || (it.rfiID != null && it.rfiID == station.rfiID) }
+            list.add(0, station)
+            if (list.size > 10) {
+                list.removeAt(list.lastIndex)
+            }
+            dataStoreManager.saveViewedRecentStations(list)
+        }
+    }
+
+    fun clearViewedRecentTrains() {
+        viewModelScope.launch {
+            dataStoreManager.saveViewedRecentTrains(emptyList())
+        }
+    }
+
+    fun clearViewedRecentStations() {
+        viewModelScope.launch {
+            dataStoreManager.saveViewedRecentStations(emptyList())
+        }
+    }
+
     fun isMyStation(vtID: String): Boolean {
         return myStations.value.any { it.vtID == vtID }
     }
@@ -584,6 +799,16 @@ class TrainViewModel(
                 set.add(sectionId)
             }
             dataStoreManager.saveCollapsedSections(set)
+        }
+    }
+
+    fun toggleRememberSectionState(sectionId: String) {
+        viewModelScope.launch {
+            val states = rememberSectionState.value.toMutableMap()
+            val defaultRemember = sectionId != AppSection.PASSANTE.name
+            val current = states[sectionId] ?: defaultRemember
+            states[sectionId] = !current
+            dataStoreManager.saveRememberSectionState(states)
         }
     }
 
@@ -840,7 +1065,7 @@ class TrainViewModel(
 
     // --- Station & Scraping Fetch Actions ---
 
-    fun fetchTrains(station: Station) {
+    fun fetchTrains(station: Station, isDepartures: Boolean = true) {
         _isLoading.value = true
         _stationAlerts.value = null
 
@@ -853,10 +1078,12 @@ class TrainViewModel(
 
                 var scraperSuccess = false
                 if (!rfiScraperId.isNullOrEmpty()) {
-                    val result = RfiScraper.performRfiScraping(rfiScraperId, isDepartures = true)
-                    if (result.first.isNotEmpty() || result.second != null) {
-                        _trains.value = result.first
+                    val result = RfiScraper.performRfiScraping(rfiScraperId, isDepartures = isDepartures)
+                    if (result.second != null) {
                         _stationAlerts.value = result.second
+                    }
+                    if (result.first.isNotEmpty()) {
+                        _trains.value = result.first
                         scraperSuccess = true
                     }
                 }
@@ -866,9 +1093,10 @@ class TrainViewModel(
                         timeZone = TimeZone.getTimeZone("Europe/Rome")
                     }
                     val dateStr = f.format(Date()).replace(" ", "%20")
+                    val endpoint = if (isDepartures) "partenze" else "arrivi"
                     val response = withContext(Dispatchers.IO) {
                         NetworkClient.viaggiatrenoService.getStationBoard(
-                            endpoint = "partenze",
+                            endpoint = endpoint,
                             vtID = vtApiId,
                             dateStr = dateStr
                         )
@@ -881,12 +1109,24 @@ class TrainViewModel(
                             val item = array.getJSONObject(i)
                             val num = item.optInt("numeroTreno").toString()
                             var cat = item.optString("categoriaDescrizione").trim()
-                            val dest = item.optString("destinazione").lowercase().replaceFirstChar { it.titlecase() }
-                            val timeVal = item.optLong("orarioPartenza")
+                            val dest = if (isDepartures) {
+                                item.optString("destinazione")
+                            } else {
+                                item.optString("origine")
+                            }.lowercase().replaceFirstChar { it.titlecase() }
+                            
+                            val timeVal = if (isDepartures) {
+                                item.optLong("orarioPartenza")
+                            } else {
+                                item.optLong("orarioArrivo")
+                            }
+                            
                             val ritardo = item.optInt("ritardo")
 
-                            val binEff = item.optString("binarioEffettivoPartenzaDescrizione", "").takeIf { it.trim().lowercase() != "null" && it.isNotBlank() }
-                            val binProg = item.optString("binarioProgrammatoPartenzaDescrizione", "").takeIf { it.trim().lowercase() != "null" && it.isNotBlank() }
+                            val binEffKey = if (isDepartures) "binarioEffettivoPartenzaDescrizione" else "binarioEffettivoArrivoDescrizione"
+                            val binProgKey = if (isDepartures) "binarioProgrammatoPartenzaDescrizione" else "binarioProgrammatoArrivoDescrizione"
+                            val binEff = item.optString(binEffKey, "").takeIf { it.trim().lowercase() != "null" && it.isNotBlank() }
+                            val binProg = item.optString(binProgKey, "").takeIf { it.trim().lowercase() != "null" && it.isNotBlank() }
                             val platform = (binEff ?: binProg)?.trim()?.takeIf { it.isNotEmpty() } ?: "--"
 
                             val catUpper = cat.uppercase()
@@ -963,92 +1203,121 @@ class TrainViewModel(
             if (searchResponse.isSuccessful) {
                 val raw = searchResponse.body()?.string().orEmpty()
                 val lines = raw.split("\n").filter { it.trim().isNotEmpty() }
-                val targetLine = lines.firstOrNull { it.contains("|$clean-") } ?: lines.firstOrNull()
-                    ?: return@withContext StopsResult(emptyList(), TrainStatus(), "Dettagli del treno non trovati.")
+                val targets = lines.filter { it.contains("|$clean-") }.ifEmpty { if (lines.isNotEmpty()) listOf(lines[0]) else emptyList() }
+                if (targets.isEmpty()) return@withContext StopsResult(emptyList(), TrainStatus(), "Dettagli del treno non trovati.")
 
-                val pipes = targetLine.split("|")
-                if (pipes.size < 2) return@withContext StopsResult(emptyList(), TrainStatus(), "Dati API viaggiatreno incompleti.")
+                val resultsList = coroutineScope {
+                    targets.map { targetLine ->
+                        async {
+                            val pipes = targetLine.split("|")
+                            if (pipes.size < 2) return@async null
+                            val subParts = pipes[1].split("-")
+                            if (subParts.size < 2) return@async null
+                            val originID = subParts[1]
+                            val timestamp = if (subParts.size >= 3) subParts[2] else ""
 
-                val subParts = pipes[1].split("-")
-                if (subParts.size < 2) return@withContext StopsResult(emptyList(), TrainStatus(), "ID origine non trovato.")
-
-                val originID = subParts[1]
-                val timestamp = if (subParts.size >= 3) subParts[2] else ""
-
-                val progressResponse = if (timestamp.isNotEmpty()) {
-                    NetworkClient.viaggiatrenoService.getTrainProgressWithTimestamp(originID, clean, timestamp)
-                } else {
-                    NetworkClient.viaggiatrenoService.getTrainProgress(originID, clean)
-                }
-
-                if (progressResponse.isSuccessful) {
-                    val rawBody = progressResponse.body()?.string().orEmpty()
-                    if (rawBody.isEmpty()) return@withContext StopsResult(emptyList(), TrainStatus(), "Risposta server vuota.")
-
-                    val json = JSONObject(rawBody)
-                    val status = TrainStatus().apply {
-                        isDeparted = !(json.optBoolean("nonPartito", true))
-                        isArrived = json.optBoolean("arrivato", false)
-                        lastStation = json.optString("stazioneUltimoRilevamento", "--")
-                        lastTime = json.optString("compOraUltimoRilevamento", json.optString("oraUltimoRilevamento", "--:--"))
-
-                        val ritardi = json.optJSONArray("compRitardo")
-                        if (ritardi != null && ritardi.length() > 0) {
-                            statusMessage = ritardi.getString(0)
-                        } else {
-                            statusMessage = if (isDeparted) "In viaggio" else "In attesa di partenza"
-                        }
-
-                        val provv = json.optInt("provvedimento", 0)
-                        if (provv != 0) {
-                            cancellationNote = "TRENO CANCELLATO O DEVIATO"
-                            statusMessage = "Soppresso"
-                        }
-                    }
-
-                    val globalDelay = json.optInt("ritardo", 0)
-                    val fermate = json.optJSONArray("fermate")
-                    val stops = mutableListOf<Stop>()
-
-                    if (fermate != null) {
-                        val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault()).apply {
-                            timeZone = TimeZone.getTimeZone("Europe/Rome")
-                        }
-
-                        for (i in 0 until fermate.length()) {
-                            val f = fermate.getJSONObject(i)
-                            val name = f.optString("stazione", "Sconosciuta").lowercase().replaceFirstChar { it.titlecase() }
-                            val tProg = f.optLong("programmata")
-                            val tEff = f.optLong("effettiva")
-
-                            val stopSpecificDelay = f.optInt("ritardo", 0)
-                            val effectiveDelay = if (stopSpecificDelay > 0) stopSpecificDelay else globalDelay
-
-                            val pTime = timeFormatter.format(Date(tProg))
-                            val actTime = if (tEff > 0) timeFormatter.format(Date(tEff)) else null
-
-                            var estTime: String? = null
-                            if (actTime == null && effectiveDelay >= 4) {
-                                val cal = java.util.Calendar.getInstance().apply {
-                                    time = Date(tProg)
-                                    add(java.util.Calendar.MINUTE, effectiveDelay)
-                                }
-                                estTime = timeFormatter.format(cal.time)
+                            val progressResponse = if (timestamp.isNotEmpty()) {
+                                NetworkClient.viaggiatrenoService.getTrainProgressWithTimestamp(originID, clean, timestamp)
+                            } else {
+                                NetworkClient.viaggiatrenoService.getTrainProgress(originID, clean)
                             }
 
-                            stops.add(
-                                Stop(
-                                    stationName = name,
-                                    time = pTime,
-                                    actualTime = actTime,
-                                    delay = effectiveDelay,
-                                    estimatedTime = estTime
-                                )
-                            )
+                            if (progressResponse.isSuccessful) {
+                                val rawBody = progressResponse.body()?.string().orEmpty()
+                                if (rawBody.isNotEmpty()) Pair(targetLine, org.json.JSONObject(rawBody)) else null
+                            } else null
                         }
+                    }.awaitAll()
+                }.filterNotNull()
+
+                if (resultsList.isEmpty()) return@withContext StopsResult(emptyList(), TrainStatus(), "Risposta server vuota.")
+
+                val nowTs = System.currentTimeMillis()
+                var bestJson: org.json.JSONObject? = null
+                var bestScore = -1.0
+
+                for ((targetLine, jsonObj) in resultsList) {
+                    val pipes = targetLine.split("|")
+                    val subParts = if (pipes.size >= 2) pipes[1].split("-") else emptyList()
+                    val tsStr = if (subParts.size >= 3) subParts[2] else ""
+                    val trainTs = tsStr.toLongOrNull() ?: nowTs
+
+                    val deltaDays = Math.abs(nowTs - trainTs) / (1000.0 * 60 * 60 * 24)
+                    val isDeparted = !(jsonObj.optBoolean("nonPartito", true))
+                    val isArrived = jsonObj.optBoolean("arrivato", false)
+
+                    val baseScore = if (isDeparted && !isArrived) 10000.0 else 1000.0
+                    val score = baseScore - (deltaDays * 100.0)
+
+                    if (score > bestScore) {
+                        bestScore = score
+                        bestJson = jsonObj
                     }
-                    return@withContext StopsResult(stops, status, null)
                 }
+
+                val json = bestJson ?: resultsList.first().second
+                val status = TrainStatus().apply {
+                    isDeparted = !(json.optBoolean("nonPartito", true))
+                    isArrived = json.optBoolean("arrivato", false)
+                    lastStation = json.optString("stazioneUltimoRilevamento", "--")
+                    lastTime = json.optString("compOraUltimoRilevamento", json.optString("oraUltimoRilevamento", "--:--"))
+
+                    val ritardi = json.optJSONArray("compRitardo")
+                    if (ritardi != null && ritardi.length() > 0) {
+                        statusMessage = ritardi.getString(0)
+                    } else {
+                        statusMessage = if (isDeparted) "In viaggio" else "In attesa di partenza"
+                    }
+
+                    val provv = json.optInt("provvedimento", 0)
+                    if (provv != 0) {
+                        cancellationNote = "TRENO CANCELLATO O DEVIATO"
+                        statusMessage = "Soppresso"
+                    }
+                }
+
+                val globalDelay = json.optInt("ritardo", 0)
+                val fermate = json.optJSONArray("fermate")
+                val stops = mutableListOf<Stop>()
+
+                if (fermate != null) {
+                    val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault()).apply {
+                        timeZone = TimeZone.getTimeZone("Europe/Rome")
+                    }
+
+                    for (i in 0 until fermate.length()) {
+                        val f = fermate.getJSONObject(i)
+                        val name = f.optString("stazione", "Sconosciuta").lowercase().replaceFirstChar { it.titlecase() }
+                        val tProg = f.optLong("programmata")
+                        val tEff = f.optLong("effettiva")
+
+                        val stopSpecificDelay = f.optInt("ritardo", 0)
+                        val effectiveDelay = if (stopSpecificDelay > 0) stopSpecificDelay else globalDelay
+
+                        val pTime = timeFormatter.format(Date(tProg))
+                        val actTime = if (tEff > 0) timeFormatter.format(Date(tEff)) else null
+
+                        var estTime: String? = null
+                        if (actTime == null && effectiveDelay >= 4) {
+                            val cal = java.util.Calendar.getInstance().apply {
+                                time = Date(tProg)
+                                add(java.util.Calendar.MINUTE, effectiveDelay)
+                            }
+                            estTime = timeFormatter.format(cal.time)
+                        }
+
+                        stops.add(
+                            Stop(
+                                stationName = name,
+                                time = pTime,
+                                actualTime = actTime,
+                                delay = effectiveDelay,
+                                estimatedTime = estTime
+                            )
+                        )
+                    }
+                }
+                return@withContext StopsResult(stops, status, null)
             }
             return@withContext StopsResult(emptyList(), TrainStatus(), "Dati in aggiornamento o non disponibili.")
         } catch (e: Exception) {
@@ -1176,12 +1445,12 @@ class TrainViewModel(
         }
     }
 
-    fun startAutoRefresh(station: Station) {
+    fun startAutoRefresh(station: Station, isDepartures: Boolean = true) {
         refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
             while (true) {
                 delay(45000)
-                fetchTrains(station)
+                fetchTrains(station, isDepartures)
             }
         }
     }
@@ -1224,6 +1493,112 @@ class TrainViewModel(
             val list = smartRoutes.value.toMutableList()
             list.removeAll { it.id == id }
             dataStoreManager.saveSmartRoutes(list)
+        }
+    }
+
+    private fun checkAndCleanOneShotNotifications() {
+        viewModelScope.launch {
+            val lastCleanDate = dataStoreManager.lastOneShotCleanDateFlow.first()
+            val today = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
+            
+            if (lastCleanDate != today) {
+                var list = favoriteTrains.value.toMutableList()
+                var changed = false
+                
+                list = list.map {
+                    if (it.notifyDelay && (it.activeDays == null || it.activeDays.isEmpty())) {
+                        changed = true
+                        it.copy(
+                            notifyDelay = false,
+                            notifyDeparture = false,
+                            notifyStationPass = false,
+                            notifyPlatformChange = false
+                        )
+                    } else {
+                        it
+                    }
+                }.toMutableList()
+                
+                if (changed) {
+                    dataStoreManager.saveFavoriteTrains(list)
+                }
+                dataStoreManager.saveLastOneShotCleanDate(today)
+            }
+        }
+    }
+    fun fetchComfortReports(trainNumber: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val response = NetworkClient.backendService.getComfortReports(trainNumber)
+                if (response.isSuccessful) {
+                    val rawBody = response.body()?.string().orEmpty()
+                    if (rawBody.isNotEmpty()) {
+                        val root = JSONObject(rawBody)
+                        val reportsMap = mutableMapOf<String, Int>()
+                        
+                        reportsMap["crowded"] = root.optInt("crowded", 0)
+                        reportsMap["hot"] = root.optInt("hot", 0)
+                        reportsMap["cold"] = root.optInt("cold", 0)
+                        reportsMap["stopped"] = root.optInt("stopped", 0)
+
+                        val blockedList = mutableListOf<String>()
+                        val arr = root.optJSONArray("blocked_locations")
+                        if (arr != null) {
+                            for (i in 0 until arr.length()) {
+                                blockedList.add(arr.getString(i))
+                            }
+                        }
+                        
+                        withContext(Dispatchers.Main) {
+                            _currentTrainReports.value = reportsMap
+                            _currentTrainBlockedLocations.value = blockedList
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun postComfortReport(
+        trainNumber: String,
+        type: String,
+        locality: String? = null,
+        lastStation: String? = null,
+        lastTime: String? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val todayStr = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
+                val prefKey = "reported_train_${trainNumber}_${todayStr}_$type"
+                val sharedPref = context.getSharedPreferences("comfort_reports", Context.MODE_PRIVATE)
+                if (sharedPref.getBoolean(prefKey, false)) return@launch
+
+                val payload = JSONObject().apply {
+                    put("train_number", trainNumber)
+                    put("report_type", type)
+                    if (locality != null) put("locality", locality)
+                    if (lastStation != null) put("last_station", lastStation)
+                    if (lastTime != null) put("last_time", lastTime)
+                }
+                val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
+                
+                val response = NetworkClient.backendService.postComfortReport(body)
+                if (response.isSuccessful) {
+                    sharedPref.edit().apply {
+                        putBoolean(prefKey, true)
+                        if (type == "moving") {
+                            putBoolean("reported_train_${trainNumber}_${todayStr}_stopped", false)
+                        } else if (type == "stopped") {
+                            putBoolean("reported_train_${trainNumber}_${todayStr}_moving", false)
+                        }
+                    }.apply()
+                    fetchComfortReports(trainNumber) // refresh
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 }

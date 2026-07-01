@@ -5,7 +5,7 @@ object SuburbanData {
 
     init {
         // --- Stations ---
-        val bovisa = Station("Milano Bovisa", null, "S01201", 45.5025, 9.1592)
+        val bovisa = Station("Milano Bovisa", null, "S01642", 45.5025, 9.1592)
         val certosa = Station("Certosa", "1708", "S01640", 45.5085, 9.1272)
         val villapizzone = Station("Villapizzone", "3099", "S01639", 45.4998, 9.1465)
         val lancetti = Station("Lancetti", "1713", "S01643", 45.4925, 9.1751)
@@ -17,10 +17,10 @@ object SuburbanData {
         val rogoredo = Station("Milano Rogoredo", "1720", "S01820", 45.4333, 9.2389)
         val forlanini = Station("Forlanini", "3169", "S01492", 45.4625, 9.2368)
 
-        val domodossola = Station("Milano Domodossola", null, "S01206", 45.4811, 9.1619)
-        val cadorna = Station("Milano Cadorna", null, "S01200", 45.4686, 9.1752)
+        val domodossola = Station("Milano Domodossola", null, "S01067", 45.4811, 9.1619)
+        val cadorna = Station("Milano Cadorna", null, "S01066", 45.4686, 9.1752)
 
-        val saronno = Station("Saronno", null, "S01150", 45.6264, 9.0336)
+        val saronno = Station("Saronno", null, "S01933", 45.6264, 9.0336)
         val greco = Station("Milano Greco Pirelli", "1711", "S01326", 45.5129, 9.2141)
         val lambrate = Station("Milano Lambrate", "1712", "S01701", 45.4849, 9.2373)
         val romana = Station("Milano Scalo Romana", "1717", "S01632", 45.4458, 9.2131)
@@ -61,40 +61,40 @@ object SuburbanData {
         val treviglio = Station("Treviglio", "2919", "S01708", 45.5201, 9.5932)
 
         // S1 West / East
-        val caronno = Station("Caronno Pertusella", null, "S01151", 45.5983, 9.0432)
-        val cesate = Station("Cesate", null, "S01152", 45.5812, 9.0621)
-        val garbagnateM = Station("Garbagnate Milanese", null, "S01153", 45.5684, 9.0763)
-        val garbagnateP = Station("Garbagnate Parco delle Groane", null, "S01154", 45.5562, 9.0883)
-        val bollateN = Station("Bollate Nord", null, "S01155", 45.5451, 9.1021)
-        val bollateC = Station("Bollate Centro", null, "S01156", 45.5342, 9.1162)
-        val novate = Station("Novate Milanese", null, "S01157", 45.5262, 9.1301)
-        val quartoOggiaro = Station("Milano Quarto Oggiaro", null, "S01158", 45.5121, 9.1412)
-        val sanDonato = Station("San Donato Milanese", "1836", "S01821", 45.4183, 9.2562)
-        val borgolombardo = Station("Borgolombardo", "1835", "S01822", 45.4062, 9.2683)
-        val sanGiuliano = Station("San Giuliano Milanese", "1834", "S01823", 45.3983, 9.2812)
-        val melegnano = Station("Melegnano", "1833", "S01824", 45.3592, 9.3235)
-        val tavazzano = Station("Tavazzano", "1831", "S01825", 45.3262, 9.3783)
-        val lodi = Station("Lodi", "1830", "S01826", 45.2796, 9.4795)
+        val caronno = Station("Caronno Pertusella", null, "S01076", 45.5983, 9.0432)
+        val cesate = Station("Cesate", null, "S01075", 45.5812, 9.0621)
+        val garbagnateM = Station("Garbagnate Milanese", null, "S01074", 45.5684, 9.0763)
+        val garbagnateP = Station("Garbagnate Parco delle Groane", null, "S01073", 45.5562, 9.0883)
+        val bollateN = Station("Bollate Nord", null, "S01072", 45.5451, 9.1021)
+        val bollateC = Station("Bollate Centro", null, "S01071", 45.5342, 9.1162)
+        val novate = Station("Novate Milanese", null, "S01070", 45.5262, 9.1301)
+        val quartoOggiaro = Station("Milano Quarto Oggiaro", null, "S01069", 45.5121, 9.1412)
+        val sanDonato = Station("San Donato Milanese", "2487", "S01624", 45.4183, 9.2562)
+        val borgolombardo = Station("Borgolombardo", "710", "S01830", 45.4062, 9.2683)
+        val sanGiuliano = Station("San Giuliano Milanese", "2520", "S01821", 45.3983, 9.2812)
+        val melegnano = Station("Melegnano", "1688", "S01822", 45.3592, 9.3235)
+        val tavazzano = Station("Tavazzano", "2820", "S01824", 45.3262, 9.3783)
+        val lodi = Station("Lodi", "1584", "S01825", 45.2796, 9.4795)
 
         // S2 West
-        val mariano = Station("Mariano Comense", null, "S01100", 45.6983, 9.1832)
-        val cabiate = Station("Cabiate", null, "S01101", 45.6812, 9.1721)
-        val meda = Station("Meda", null, "S01102", 45.6684, 9.1563)
-        val seveso = Station("Seveso", null, "S01103", 45.6421, 9.1412)
-        val cesano = Station("Cesano Maderno", null, "S01104", 45.6262, 9.1501)
-        val bovisio = Station("Bovisio Masciago-Mombello", null, "S01105", 45.6062, 9.1521)
-        val varedo = Station("Varedo", null, "S01106", 45.5983, 9.1583)
-        val palazzolo = Station("Palazzolo Milanese", null, "S01107", 45.5862, 9.1621)
-        val paderno = Station("Paderno Dugnano", null, "S01108", 45.5712, 9.1683)
+        val mariano = Station("Mariano Comense", null, "S01089", 45.6983, 9.1832)
+        val cabiate = Station("Cabiate", null, "S01088", 45.6812, 9.1721)
+        val meda = Station("Meda", null, "S01087", 45.6684, 9.1563)
+        val seveso = Station("Seveso", null, "S01925", 45.6421, 9.1412)
+        val cesano = Station("Cesano Maderno", null, "S01086", 45.6262, 9.1501)
+        val bovisio = Station("Bovisio Masciago-Mombello", null, "S01085", 45.6062, 9.1521)
+        val varedo = Station("Varedo", null, "S01084", 45.5983, 9.1583)
+        val palazzolo = Station("Palazzolo Milanese", null, "S01083", 45.5862, 9.1621)
+        val paderno = Station("Paderno Dugnano", null, "S01082", 45.5712, 9.1683)
         val cormano = Station("Cormano-Cusano Milanino", null, "S01109", 45.5451, 9.1783)
-        val bruzzano = Station("Milano Bruzzano", null, "S01110", 45.5262, 9.1762)
+        val bruzzano = Station("Milano Bruzzano", null, "S01079", 45.5262, 9.1762)
 
         // S13 East
-        val locate = Station("Locate Triulzi", "1837", "S01831", 45.3583, 9.2182)
-        val pieve = Station("Pieve Emanuele", "3381", "S01832", 45.3421, 9.2062)
-        val villamaggiore = Station("Villamaggiore", "1838", "S01833", 45.3212, 9.2021)
-        val certosaPavia = Station("Certosa di Pavia", "1839", "S01834", 45.2562, 9.1583)
-        val pavia = Station("Pavia", "1840", "S01835", 45.1868, 9.1625)
+        val locate = Station("Locate Triulzi", "1583", "S01801", 45.3583, 9.2182)
+        val pieve = Station("Pieve Emanuele", "1749", "S01104", 45.3421, 9.2062)
+        val villamaggiore = Station("Villamaggiore", "3092", "S01802", 45.3212, 9.2021)
+        val certosaPavia = Station("Certosa di Pavia", "1069", "S01803", 45.2562, 9.1583)
+        val pavia = Station("Pavia", "2046", "S01860", 45.1868, 9.1625)
 
         // --- Flows ---
         val tunnelOvestBovisa = listOf(bovisa, lancetti, garibaldiPassante, repubblica, venezia, dateo, vittoria, rogoredo)
@@ -114,17 +114,11 @@ object SuburbanData {
         allLines = listOf(
             SuburbanLine("S1", "S1 Saronno - Lodi", "#e30613", lineS1Stations),
             SuburbanLine("S2", "S2 Mariano - Rogoredo", "#009640", lineS2Stations),
-            SuburbanLine("S3", "S3 Saronno - Cadorna", "#a61a30", ramoCadorna),
-            SuburbanLine("S4", "S4 Camnago - Cadorna", "#8ec06c", ramoCadorna),
             SuburbanLine("S5", "S5 Varese - Treviglio", "#f39200", lineS5Stations),
             SuburbanLine("S6", "S6 Novara - Pioltello", "#ffd60a", lineS6Stations),
-            SuburbanLine("S7", "S7 Lecco - P. Garibaldi", "#ec008c", listOf(garibaldiSup)),
-            SuburbanLine("S8", "S8 Lecco - P. Garibaldi", "#fbc5b0", listOf(garibaldiSup)),
-            SuburbanLine("S9", "S9 Saronno - Albairate", "#7e1f7c", cinturaS9),
             SuburbanLine("S11", "S11 Chiasso - Rho", "#8a8bbf", superficieS11),
             SuburbanLine("S12", "S12 Cormano - Melegnano", "#005a2b", lineS12Stations),
             SuburbanLine("S13", "S13 Bovisa - Pavia", "#a37a3e", lineS13Stations),
-            SuburbanLine("S19", "S19 Rogoredo - Albairate", "#5a0f2b", listOf(rogoredo, romana, tibaldi, romolo, cristoforo, albairate)),
         )
     }
 }

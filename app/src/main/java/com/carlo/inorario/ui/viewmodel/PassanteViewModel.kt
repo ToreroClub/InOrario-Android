@@ -53,6 +53,9 @@ class PassanteViewModel(
     private val _isLoadingSmartRoutes = MutableStateFlow(false)
     val isLoadingSmartRoutes = _isLoadingSmartRoutes.asStateFlow()
 
+    private val _passanteLineArrivals = MutableStateFlow<List<String>>(emptyList())
+    val passanteLineArrivals = _passanteLineArrivals.asStateFlow()
+
     // --- References Flow ---
     val selectedPassanteStation: StateFlow<Station> = dataStoreManager.selectedPassanteStationFlow
         .stateIn(
@@ -60,6 +63,53 @@ class PassanteViewModel(
             started = SharingStarted.Eagerly,
             initialValue = Station("Porta Venezia", "1723", "S01061", 45.4746, 9.2052)
         )
+
+    fun directCountdown(train: Train): String? {
+        val romeZone = java.util.TimeZone.getTimeZone("Europe/Rome")
+        val now = java.util.Calendar.getInstance(romeZone)
+        val currentTotalMinutes = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
+        
+        val timeParts = train.time.split(":")
+        if (timeParts.size < 2) return null
+        val trainHour = timeParts[0].toIntOrNull() ?: return null
+        val trainMinute = timeParts[1].toIntOrNull() ?: return null
+        var trainTotalMinutes = trainHour * 60 + trainMinute
+        
+        val delayStr = train.delay.replace("+", "").replace("'", "")
+        val delayVal = if (delayStr.lowercase().contains("orario")) 0 else (delayStr.toIntOrNull() ?: 0)
+        trainTotalMinutes += delayVal
+        
+        var diff = trainTotalMinutes - currentTotalMinutes
+        if (diff < -12 * 60) diff += 24 * 60
+        if (diff > 12 * 60) diff -= 24 * 60
+        
+        if (diff < 0) return null
+        return "${diff}m"
+    }
+
+    fun shortDestination(dest: String): String {
+        val d = dest.lowercase()
+        return when {
+            d.contains("novara") || d.contains("nov ") -> "NOV"
+            d.contains("rho") -> "RHO"
+            d.contains("treviglio") -> "TREV"
+            d.contains("pioltello") -> "PIOL"
+            d.contains("varese") -> "VAR"
+            d.contains("gallarate") -> "GALL"
+            d.contains("saronno") -> "SAR"
+            d.contains("lodi") -> "LODI"
+            d.contains("mariano") -> "MAR"
+            d.contains("seveso") -> "SEV"
+            d.contains("camnago") -> "CAMN"
+            d.contains("melegnano") -> "MEL"
+            d.contains("cormano") -> "CORM"
+            d.contains("pavia") -> "PAV"
+            d.contains("garbagnate") -> "GARB"
+            d.contains("bovisa") -> "BOV"
+            d.contains("magenta") -> "MAG"
+            else -> dest.take(3).uppercase()
+        }
+    }
 
     fun selectPassanteStation(station: Station) {
         viewModelScope.launch {
@@ -75,6 +125,27 @@ class PassanteViewModel(
             val trainsFetched = fetchTrainsForStation(station)
             _passanteTrains.value = trainsFetched
             _isLoadingPassanteBoard.value = false
+
+            // compute passanteLineArrivals
+            val selectedLines = trainViewModel.selectedSuburbanLines.value
+            val arrivals = mutableListOf<String>()
+            val linesGroup = trainsFetched.groupBy { resolveLine(it) }
+            for ((line, lineTrains) in linesGroup) {
+                if (!line.startsWith("S")) continue
+                if (selectedLines.isNotEmpty() && !selectedLines.contains(line)) continue
+                
+                val destinationsGroup = lineTrains.groupBy { shortDestination(it.destination) }
+                val parts = destinationsGroup.map { (dest, trains) ->
+                    val nextTrain = trains.sortedBy { directCountdown(it)?.replace("m", "")?.toIntOrNull() ?: 999 }.firstOrNull { directCountdown(it) != null }
+                    if (nextTrain != null) {
+                        "$dest ${directCountdown(nextTrain)}"
+                    } else null
+                }.filterNotNull()
+                if (parts.isNotEmpty()) {
+                    arrivals.add("$line: ${parts.joinToString("  ·  ")}")
+                }
+            }
+            _passanteLineArrivals.value = arrivals.sorted()
 
             fetchTunnelHealth()
         }

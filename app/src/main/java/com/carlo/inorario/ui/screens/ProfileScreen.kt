@@ -21,15 +21,8 @@ import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Feedback
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Train
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -44,8 +37,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -53,7 +44,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,20 +52,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.carlo.inorario.data.model.AppSection
-import com.carlo.inorario.data.model.SuburbanData
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import com.carlo.inorario.ui.theme.getSuburbanColor
 import com.carlo.inorario.ui.viewmodel.ProfileViewModel
 import com.carlo.inorario.ui.viewmodel.TrainViewModel
 
@@ -89,13 +69,12 @@ fun ProfileScreen(
     onCustomizePassanteClick: () -> Unit,
     onRerunTutorialClick: () -> Unit,
     onNotificationCenterClick: () -> Unit = {},
+    onPurchaseClick: () -> Unit = {},
 ) {
     var showFeedbackDialog by remember { mutableStateOf(value = false) }
     var thankYouDialogShown by remember { mutableStateOf(false) }
 
-    val hasCappuccino by profileViewModel.hasCappuccino.collectAsState()
-    val hasColazione by profileViewModel.hasColazione.collectAsState()
-    val developerMock by trainViewModel.developerMockPurchases.collectAsState()
+    val hasSupport by profileViewModel.hasSupport.collectAsState()
 
     Scaffold(
         topBar = {
@@ -196,7 +175,7 @@ fun ProfileScreen(
                 }
             }
 
-            // Section 4: Tip jar / mock cappuccino support
+            // Section 4: Tip jar — single offer
             item {
                 Column(
                     modifier = Modifier
@@ -214,26 +193,14 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     TipRow(
-                        title = "Mancia Cappuccino 🥛",
-                        description = "Un aiuto per coprire i costi dei server.",
-                        price = "€ 1,99",
-                        isPurchased = hasCappuccino,
-                    ) {
-                        profileViewModel.saveHasCappuccino(true)
-                        thankYouDialogShown = true
-                    }
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                    TipRow(
-                        title = "Colazione Pendolare 🥐",
-                        description = "Caffè e brioche per dare il massimo dell'energia.",
+                        title = "Offrimi un caffè ☕",
+                        description = "Se l'app ti piace e vuoi supportare lo sviluppo: sblocchi fino a 10 treni monitorabili con notifiche e le notifiche per scioperi, lavori e infomobilità per la tua regione.",
                         price = "€ 2,99",
-                        isPurchased = hasColazione,
+                        isPurchased = hasSupport,
                     ) {
-                        profileViewModel.saveHasColazione(true)
-                        thankYouDialogShown = true
+                        if (!hasSupport) {
+                            onPurchaseClick()
+                        }
                     }
                 }
             }
@@ -259,70 +226,6 @@ fun ProfileScreen(
                         iconColor = Color(0xFF007AFF),
                         onClick = onRerunTutorialClick
                     )
-                }
-            }
-
-            // Section 6: Developer Mode
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surface)
-                        .padding(vertical = 8.dp)
-                ) {
-                    Text(
-                        text = "MODALITÀ SVILUPPATORE",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                    
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                trainViewModel.saveDeveloperMockPurchases(!developerMock)
-                            }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF8E44AD).copy(alpha = 0.12f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Settings,
-                                    contentDescription = null,
-                                    tint = Color(0xFF8E44AD),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "Sblocca Tutto (Mock Acquisti)",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Switch(
-                            checked = developerMock,
-                            onCheckedChange = { newValue ->
-                                trainViewModel.saveDeveloperMockPurchases(newValue)
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = Color(0xFF8E44AD)
-                            )
-                        )
-                    }
                 }
             }
 

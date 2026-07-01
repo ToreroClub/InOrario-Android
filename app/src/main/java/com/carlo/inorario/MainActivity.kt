@@ -7,6 +7,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -29,6 +34,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.carlo.inorario.data.billing.BillingManager
+import androidx.compose.material3.SnackbarHostState
+import com.carlo.inorario.ui.components.MetroQuickViewBottomSheet
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 class MainActivity : ComponentActivity() {
 
@@ -55,22 +66,53 @@ class MainActivity : ComponentActivity() {
         val locationViewModel = LocationViewModel(locationTracker)
         val profileViewModel = ProfileViewModel(dataStoreManager)
         val metroViewModel = MetroViewModel(dataStoreManager)
-        val newsViewModel = NewsViewModel()
+        val newsViewModel = NewsViewModel(dataStoreManager)
+
+        val billingManager = BillingManager(
+            context = applicationContext,
+            dataStoreManager = dataStoreManager,
+            onPurchaseSuccess = {
+                // We can let ProfileScreen show thank you or just rely on the UI update
+            },
+            onPurchaseError = { errorMsg ->
+                // Basic error logging, UI could be extended to show it
+                android.util.Log.e("Billing", "Errore acquisto: $errorMsg")
+            }
+        )
+        lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+            override fun onCreate(owner: androidx.lifecycle.LifecycleOwner) {
+                billingManager.startConnection()
+            }
+            override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) {
+                billingManager.endConnection()
+            }
+        })
 
         // Retrieve Firebase Messaging token on launch and update preferences
-        com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (task.isSuccessful) {
-                val token = task.result ?: ""
-                if (token.isNotEmpty()) {
-                    profileViewModel.saveFcmToken(token)
-                    lifecycleScope.launch {
-                        val isEnabled = dataStoreManager.remoteNotificationsEnabledFlow.first()
-                        if (isEnabled) {
-                            trainViewModel.syncRemoteNotifications(enabled = true, token = token)
+        try {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val token = task.result ?: ""
+                    android.util.Log.d("MainActivity", "Token FCM recuperato con successo: $token")
+                    if (token.isNotEmpty()) {
+                        profileViewModel.saveFcmToken(token)
+                        lifecycleScope.launch {
+                            val isEnabled = dataStoreManager.remoteNotificationsEnabledFlow.first()
+                            if (isEnabled) {
+                                trainViewModel.syncRemoteNotifications(enabled = true, token = token)
+                            }
                         }
                     }
+                } else {
+                    android.util.Log.e(
+                        "MainActivity",
+                        "Errore recupero token Firebase: ${task.exception?.message}",
+                        task.exception
+                    )
                 }
             }
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Errore inizializzazione Firebase Messaging: ${e.message}", e)
         }
 
         val locationPermissionRequest = registerForActivityResult(
@@ -98,6 +140,9 @@ class MainActivity : ComponentActivity() {
                 val userName by profileViewModel.userName.collectAsState()
                 val notificationLimitError by trainViewModel.notificationLimitError.collectAsState()
 
+                var showMetroBottomSheet by remember { mutableStateOf<Station?>(null) }
+                var metroTimeContext by remember { mutableStateOf("") }
+
                 if (notificationLimitError != null) {
                     AlertDialog(
                         onDismissRequest = { trainViewModel.clearNotificationLimitError() },
@@ -113,13 +158,20 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // Check if user has completed onboarding by seeing if name is configured
-                val startDest = if (userName.isEmpty()) "onboarding" else "home"
+                if (userName == null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0xFF1C1C1E))
+                    )
+                } else {
+                    // Check if user has completed onboarding by seeing if name is configured
+                    val startDest = if (userName!!.isEmpty()) "onboarding" else "home"
 
-                NavHost(
-                    navController = navController,
-                    startDestination = startDest
-                ) {
+                    NavHost(
+                        navController = navController,
+                        startDestination = startDest
+                    ) {
                     composable("onboarding") {
                         OnboardingScreen(
                             trainViewModel = trainViewModel,
@@ -154,7 +206,54 @@ class MainActivity : ComponentActivity() {
                             onTrainClick = { savedTrain ->
                                 val dummy = trainViewModel.createDummyTrain(savedTrain)
                                 navController.navigate("trainStops/${dummy.toJsonUri()}")
+                            },
+                            onSavedTripsClick = {
+                                navController.navigate("savedTrips")
                             }
+                        )
+                    }
+
+                    composable("savedTrips") {
+                        SavedTripsScreen(
+                            trainViewModel = trainViewModel,
+                            onBackClick = { navController.popBackStack() },
+                            onRouteSolutionClick = { route ->
+                                navController.navigate("favoriteRoute/${route.toJsonUri()}")
+                            },
+                            onTripDetailsClick = { solution ->
+                                navController.navigate("travelSolution/${solution.toJsonUri()}")
+                            }
+                        )
+                    }
+
+                    composable(
+                        route = "favoriteRoute/{routeJson}",
+                        arguments = listOf(navArgument("routeJson") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val routeJson = backStackEntry.arguments?.getString("routeJson").orEmpty()
+                        val route = routeJson.fromJsonUri(com.carlo.inorario.data.model.FavoriteRoute::class.java)
+
+                        FavoriteRouteSolutionScreen(
+                            route = route,
+                            trainViewModel = trainViewModel,
+                            onBackClick = { navController.popBackStack() },
+                            onSolutionClick = { solution ->
+                                navController.navigate("travelSolution/${solution.toJsonUri()}")
+                            }
+                        )
+                    }
+
+                    composable(
+                        route = "travelSolution/{solutionJson}",
+                        arguments = listOf(navArgument("solutionJson") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val solutionJson = backStackEntry.arguments?.getString("solutionJson").orEmpty()
+                        val solution = solutionJson.fromJsonUri(com.carlo.inorario.data.model.TravelSolution::class.java)
+
+                        TravelSolutionDetailsScreen(
+                            solution = solution,
+                            trainViewModel = trainViewModel,
+                            onBackClick = { navController.popBackStack() }
                         )
                     }
 
@@ -177,6 +276,9 @@ class MainActivity : ComponentActivity() {
                             onTrainClick = { savedTrain ->
                                 val dummy = trainViewModel.createDummyTrain(savedTrain)
                                 navController.navigate("trainStops/${dummy.toJsonUri()}")
+                            },
+                            onRouteSearchClick = { route ->
+                                navController.navigate("favoriteRoute/${route.toJsonUri()}")
                             }
                         )
                     }
@@ -198,9 +300,7 @@ class MainActivity : ComponentActivity() {
                             onTrainClick = { train ->
                                 navController.navigate("trainStops/${train.toJsonUri()}")
                             },
-                            onMetroClick = { metroLine ->
-                                navController.navigate("metroFrequencies/${metroLine.toJsonUri()}")
-                            }
+                            onMetroClick = {}
                         )
                     }
 
@@ -220,22 +320,10 @@ class MainActivity : ComponentActivity() {
                             },
                             onStationClick = { station ->
                                 navController.navigate("stationBoard/${station.toJsonUri()}")
-                            }
-                        )
-                    }
-
-                    composable(
-                        route = "metroFrequencies/{metroJson}",
-                        arguments = listOf(navArgument("metroJson") { type = NavType.StringType })
-                    ) { backStackEntry ->
-                        val metroJson = backStackEntry.arguments?.getString("metroJson").orEmpty()
-                        val metroLine = metroJson.fromJsonUri(MetroLine::class.java)
-
-                        MetroFrequenciesScreen(
-                            metroLine = metroLine,
-                            metroViewModel = metroViewModel,
-                            onBackClick = {
-                                navController.popBackStack()
+                            },
+                            onStopLongClick = { station, time ->
+                                showMetroBottomSheet = station
+                                metroTimeContext = time
                             }
                         )
                     }
@@ -261,6 +349,9 @@ class MainActivity : ComponentActivity() {
                             },
                             onNotificationCenterClick = {
                                 navController.navigate("notificationCenter")
+                            },
+                            onPurchaseClick = {
+                                billingManager.launchBillingFlow(this@MainActivity)
                             }
                         )
                     }
@@ -306,7 +397,18 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+
+                val currentStation = showMetroBottomSheet
+                if (currentStation != null) {
+                    MetroQuickViewBottomSheet(
+                        station = currentStation,
+                        timeContext = metroTimeContext,
+                        metroViewModel = metroViewModel,
+                        onDismiss = { showMetroBottomSheet = null }
+                    )
+                }
             }
         }
     }
+}
 }

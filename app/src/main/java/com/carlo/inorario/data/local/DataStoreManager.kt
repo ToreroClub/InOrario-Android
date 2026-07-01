@@ -9,15 +9,15 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.carlo.inorario.data.model.AppSection
 import com.carlo.inorario.data.model.FavoriteRoute
-import com.carlo.inorario.data.model.FullSchedule
+
 import com.carlo.inorario.data.model.SavedTrain
 import com.carlo.inorario.data.model.SavedTrip
 import com.carlo.inorario.data.model.Station
 import com.carlo.inorario.data.model.SuburbanRoute
+import com.carlo.inorario.data.model.TrenitaliaLocation
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "in_orario_preferences")
@@ -29,9 +29,9 @@ class DataStoreManager(private val context: Context) {
         private val REMOTE_NOTIFICATIONS_ENABLED = booleanPreferencesKey("remoteNotificationsEnabled_v1")
         private val NOTIFY_ON_STATION_PASS = booleanPreferencesKey("notifyOnStationPass_v1")
         private val FCM_TOKEN = stringPreferencesKey("fcmToken_v1")
-        private val HAS_CAPPUCCINO = booleanPreferencesKey("hasCappuccino_v1")
-        private val HAS_COLAZIONE = booleanPreferencesKey("hasColazione_v1")
-        private val DEVELOPER_MOCK_PURCHASES = booleanPreferencesKey("developerMockPurchases_v1")
+        private val HAS_CAPPUCCINO = booleanPreferencesKey("hasCappuccino_v1")   // legacy, kept for migration
+        private val HAS_COLAZIONE = booleanPreferencesKey("hasColazione_v1")     // legacy, kept for migration
+        private val HAS_SUPPORT = booleanPreferencesKey("hasSupport_v1")
         private val FAVORITE_TRAINS = stringPreferencesKey("savedFavoriteTrains_v3")
         private val MY_STATIONS = stringPreferencesKey("savedMyStations_v3")
         private val SECTION_ORDER = stringPreferencesKey("savedSectionOrder_v3")
@@ -44,12 +44,27 @@ class DataStoreManager(private val context: Context) {
         private val HOME_DESTINATION_STATION_NAME = stringPreferencesKey("homeDestinationStationName_v1")
         private val USER_NAME = stringPreferencesKey("userName_v1")
         private val USE_SPECIAL_PASSANTE_VIEW = booleanPreferencesKey("useSpecialPassanteView_v1")
-        private val METRO_CACHE = stringPreferencesKey("com.magenta.metro.cache")
+
         private val COLLAPSED_SECTIONS = stringPreferencesKey("collapsedSections_v1")
         private val STRIKE_REGION = stringPreferencesKey("strikeRegion_v1")
+        private val STRIKE_NOTIFICATIONS_ENABLED = booleanPreferencesKey("strikeNotificationsEnabled_v1")
+        private val RECENT_TRAINS = stringPreferencesKey("recentTrains_v1")
+        private val RECENT_STATIONS = stringPreferencesKey("recentStations_v1")
+        private val VIEWED_RECENT_TRAINS = stringPreferencesKey("viewedRecentTrains_v2")
+        private val VIEWED_RECENT_STATIONS = stringPreferencesKey("viewedRecentStations_v2")
+        private val NEWS_CACHE_JSON = stringPreferencesKey("newsCacheJson_v1")
+        private val NEWS_CACHE_TIME = androidx.datastore.preferences.core.longPreferencesKey("newsCacheTime_v1")
+        private val NEWS_CACHE_REGION = stringPreferencesKey("newsCacheRegion_v1")
+        private val REMEMBER_SECTION_STATE = stringPreferencesKey("rememberSectionState_v1")
+        private val RECENT_TRAVEL_LOCATIONS = stringPreferencesKey("recentTravelLocations_v1")
+        private val LAST_ONE_SHOT_CLEAN_DATE = stringPreferencesKey("lastOneShotCleanDate_v1")
     }
 
     // --- Getters with default values ---
+
+    val lastOneShotCleanDateFlow: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[LAST_ONE_SHOT_CLEAN_DATE] ?: ""
+    }
 
     val favoriteTrainsFlow: Flow<List<SavedTrain>> = context.dataStore.data.map { preferences ->
         val json = preferences[FAVORITE_TRAINS] ?: return@map emptyList()
@@ -138,6 +153,36 @@ class DataStoreManager(private val context: Context) {
         preferences[HOME_DESTINATION_STATION_NAME] ?: ""
     }
 
+    val recentTrainsFlow: Flow<List<SavedTrain>> = context.dataStore.data.map { preferences ->
+        val json = preferences[RECENT_TRAINS] ?: return@map emptyList()
+        val type = object : TypeToken<List<SavedTrain>>() {}.type
+        gson.fromJson<List<SavedTrain>>(json, type) ?: emptyList()
+    }
+
+    val recentStationsFlow: Flow<List<Station>> = context.dataStore.data.map { preferences ->
+        val json = preferences[RECENT_STATIONS] ?: return@map emptyList()
+        val type = object : TypeToken<List<Station>>() {}.type
+        gson.fromJson<List<Station>>(json, type) ?: emptyList()
+    }
+
+    val recentTravelLocationsFlow: Flow<List<TrenitaliaLocation>> = context.dataStore.data.map { preferences ->
+        val json = preferences[RECENT_TRAVEL_LOCATIONS] ?: return@map emptyList()
+        val type = object : TypeToken<List<TrenitaliaLocation>>() {}.type
+        gson.fromJson<List<TrenitaliaLocation>>(json, type) ?: emptyList()
+    }
+
+    val viewedRecentTrainsFlow: Flow<List<SavedTrain>> = context.dataStore.data.map { preferences ->
+        val json = preferences[VIEWED_RECENT_TRAINS] ?: return@map emptyList()
+        val type = object : TypeToken<List<SavedTrain>>() {}.type
+        gson.fromJson<List<SavedTrain>>(json, type) ?: emptyList()
+    }
+
+    val viewedRecentStationsFlow: Flow<List<Station>> = context.dataStore.data.map { preferences ->
+        val json = preferences[VIEWED_RECENT_STATIONS] ?: return@map emptyList()
+        val type = object : TypeToken<List<Station>>() {}.type
+        gson.fromJson<List<Station>>(json, type) ?: emptyList()
+    }
+
     val userNameFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[USER_NAME] ?: ""
     }
@@ -145,16 +190,29 @@ class DataStoreManager(private val context: Context) {
     val useSpecialPassanteViewFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[USE_SPECIAL_PASSANTE_VIEW] ?: true
     }
-    val metroCacheFlow: Flow<Map<String, FullSchedule>> = context.dataStore.data.map { preferences ->
-        val json = preferences[METRO_CACHE] ?: return@map emptyMap()
-        val type = object : TypeToken<Map<String, FullSchedule>>() {}.type
-        gson.fromJson<Map<String, FullSchedule>>(json, type) ?: emptyMap()
-    }
 
     val collapsedSectionsFlow: Flow<Set<String>> = context.dataStore.data.map { preferences ->
         val json = preferences[COLLAPSED_SECTIONS] ?: return@map emptySet()
         val type = object : TypeToken<Set<String>>() {}.type
         gson.fromJson<Set<String>>(json, type) ?: emptySet()
+    }
+
+    val rememberSectionStateFlow: Flow<Map<String, Boolean>> = context.dataStore.data.map { preferences ->
+        val json = preferences[REMEMBER_SECTION_STATE]
+        val defaultMap = mapOf(
+            AppSection.NEARBY.name to true,
+            AppSection.MY_STATIONS.name to true,
+            AppSection.FAVORITE_TRAINS.name to true,
+            AppSection.PASSANTE.name to false
+        )
+        if (json == null) {
+            defaultMap
+        } else {
+            val type = object : TypeToken<Map<String, Boolean>>() {}.type
+            val loadedMap = gson.fromJson<Map<String, Boolean>>(json, type) ?: defaultMap
+            // Merge loaded map with defaults for missing keys
+            defaultMap.toMutableMap().apply { putAll(loadedMap) }
+        }
     }
 
     // --- Setters ---
@@ -172,16 +230,30 @@ class DataStoreManager(private val context: Context) {
         preferences[FCM_TOKEN] ?: ""
     }
 
-    val hasCappuccinoFlow: Flow<Boolean> = flowOf(true)
-
-    val hasColazioneFlow: Flow<Boolean> = flowOf(true)
-
-    val developerMockPurchasesFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
-        preferences[DEVELOPER_MOCK_PURCHASES] ?: false
+    // hasSupportFlow: true if user purchased support (migrates from legacy cappuccino/colazione keys)
+    val hasSupportFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[HAS_SUPPORT]
+            ?: (preferences[HAS_CAPPUCCINO] == true || preferences[HAS_COLAZIONE] == true)
     }
 
     val strikeRegionFlow: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[STRIKE_REGION] ?: "Tutte"
+    }
+
+    val strikeNotificationsEnabledFlow: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[STRIKE_NOTIFICATIONS_ENABLED] ?: true
+    }
+
+    val newsCacheJsonFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[NEWS_CACHE_JSON]
+    }
+
+    val newsCacheTimeFlow: Flow<Long> = context.dataStore.data.map { preferences ->
+        preferences[NEWS_CACHE_TIME] ?: 0L
+    }
+
+    val newsCacheRegionFlow: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[NEWS_CACHE_REGION]
     }
 
 suspend fun saveFavoriteTrains(trains: List<SavedTrain>) {
@@ -205,6 +277,12 @@ suspend fun saveFavoriteTrains(trains: List<SavedTrain>) {
     suspend fun saveFavoriteRoutes(routes: List<FavoriteRoute>) {
         context.dataStore.edit { preferences ->
             preferences[FAVORITE_ROUTES] = gson.toJson(routes)
+        }
+    }
+
+    suspend fun saveRememberSectionState(states: Map<String, Boolean>) {
+        context.dataStore.edit { preferences ->
+            preferences[REMEMBER_SECTION_STATE] = gson.toJson(states)
         }
     }
 
@@ -244,6 +322,36 @@ suspend fun saveFavoriteTrains(trains: List<SavedTrain>) {
         }
     }
 
+    suspend fun saveRecentTrains(trains: List<SavedTrain>) {
+        context.dataStore.edit { preferences ->
+            preferences[RECENT_TRAINS] = gson.toJson(trains)
+        }
+    }
+
+    suspend fun saveRecentStations(stations: List<Station>) {
+        context.dataStore.edit { preferences ->
+            preferences[RECENT_STATIONS] = gson.toJson(stations)
+        }
+    }
+
+    suspend fun saveRecentTravelLocations(locations: List<TrenitaliaLocation>) {
+        context.dataStore.edit { preferences ->
+            preferences[RECENT_TRAVEL_LOCATIONS] = gson.toJson(locations)
+        }
+    }
+
+    suspend fun saveViewedRecentTrains(trains: List<SavedTrain>) {
+        context.dataStore.edit { preferences ->
+            preferences[VIEWED_RECENT_TRAINS] = gson.toJson(trains)
+        }
+    }
+
+    suspend fun saveViewedRecentStations(stations: List<Station>) {
+        context.dataStore.edit { preferences ->
+            preferences[VIEWED_RECENT_STATIONS] = gson.toJson(stations)
+        }
+    }
+
     suspend fun saveUserName(name: String) {
         context.dataStore.edit { preferences ->
             preferences[USER_NAME] = name
@@ -253,11 +361,6 @@ suspend fun saveFavoriteTrains(trains: List<SavedTrain>) {
     suspend fun saveUseSpecialPassanteView(use: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[USE_SPECIAL_PASSANTE_VIEW] = use
-        }
-    }
-    suspend fun saveMetroCache(cache: Map<String, FullSchedule>) {
-        context.dataStore.edit { preferences ->
-            preferences[METRO_CACHE] = gson.toJson(cache)
         }
     }
 
@@ -285,27 +388,35 @@ suspend fun saveFavoriteTrains(trains: List<SavedTrain>) {
         }
     }
 
-    suspend fun saveHasCappuccino(value: Boolean) {
+    suspend fun saveHasSupport(value: Boolean) {
         context.dataStore.edit { preferences ->
-            preferences[HAS_CAPPUCCINO] = value
-        }
-    }
-
-    suspend fun saveHasColazione(value: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[HAS_COLAZIONE] = value
-        }
-    }
-
-    suspend fun saveDeveloperMockPurchases(value: Boolean) {
-        context.dataStore.edit { preferences ->
-            preferences[DEVELOPER_MOCK_PURCHASES] = value
+            preferences[HAS_SUPPORT] = value
         }
     }
 
     suspend fun saveStrikeRegion(region: String) {
         context.dataStore.edit { preferences ->
             preferences[STRIKE_REGION] = region
+        }
+    }
+
+    suspend fun saveStrikeNotificationsEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[STRIKE_NOTIFICATIONS_ENABLED] = enabled
+        }
+    }
+
+    suspend fun saveNewsCache(json: String, time: Long, region: String) {
+        context.dataStore.edit { preferences ->
+            preferences[NEWS_CACHE_JSON] = json
+            preferences[NEWS_CACHE_TIME] = time
+            preferences[NEWS_CACHE_REGION] = region
+        }
+    }
+
+    suspend fun saveLastOneShotCleanDate(dateStr: String) {
+        context.dataStore.edit { preferences ->
+            preferences[LAST_ONE_SHOT_CLEAN_DATE] = dateStr
         }
     }
 }

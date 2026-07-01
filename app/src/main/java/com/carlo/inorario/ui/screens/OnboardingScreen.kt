@@ -39,7 +39,7 @@ fun OnboardingScreen(
     onOnboardingCompleted: () -> Unit,
     onRequestLocationPermission: () -> Unit,
 ) {
-    val pageCount = 7
+    val pageCount = 6
     val pagerState = rememberPagerState { pageCount }
     val coroutineScope = rememberCoroutineScope()
 
@@ -86,8 +86,7 @@ fun OnboardingScreen(
                 2 -> OnboardingFavoriteRoutesView(trainViewModel)
                 3 -> OnboardingPassanteLinePickerView(trainViewModel)
                 4 -> OnboardingFeaturesView()
-                5 -> OnboardingMetroView()
-                6 -> OnboardingGPSView(onRequestLocationPermission)
+                5 -> OnboardingGPSView(onRequestLocationPermission)
             }
         }
 
@@ -264,9 +263,18 @@ fun OnboardingHomeStationPickerView(trainViewModel: TrainViewModel) {
                         color = Color(0xFFFF9500)
                     )
 
-                    val allStations = remember {
-                        SuburbanData.allLines.flatMap { it.stations.map { s -> s.name } } +
-                                trainViewModel.allRFIStations.map { s -> s.name }
+                    val allStations = remember(trainViewModel.allRFIStations) {
+                        (SuburbanData.allLines.flatMap { it.stations.map { s -> s.name } } +
+                                trainViewModel.allRFIStations.map { s -> s.name })
+                            .map { name ->
+                                name.trim().lowercase().split(" ").joinToString(" ") { word ->
+                                    word.replaceFirstChar { it.uppercaseChar() }
+                                }
+                            }
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                            .distinct()
+                            .sorted()
                     }
 
                     AutocompleteTextField(
@@ -759,38 +767,16 @@ fun OnboardingPassanteLinePickerView(trainViewModel: TrainViewModel) {
 
         Spacer(modifier = Modifier.weight(1f))
 
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            ),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Column {
-                    Text(
-                        text = "Nota sulle stazioni",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
-                    Text(
-                        text = "Nelle impostazioni dell'app potrai configurare le singole stazioni da mostrare per ciascuna linea e se includere le stazioni esterne.",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
+        Text(
+            text = "Puoi configurare dalle impostazioni quali stazioni mostrare per ogni singola linea suburbana.",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+            textAlign = TextAlign.Center,
+            lineHeight = 18.sp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        )
     }
 }
 
@@ -803,7 +789,7 @@ fun OnboardingFeaturesView() {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Funzioni Smart & Widget",
+            text = "Funzioni Smart",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
@@ -828,31 +814,31 @@ fun OnboardingFeaturesView() {
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             FeatureRow(
-                icon = Icons.Default.Notifications,
-                color = Color(0xFFAF52DE),
-                title = "Notifiche & Live Activities",
-                desc = "Segui l'andamento del treno direttamente sulla Schermata di Blocco in tempo reale."
-            )
-
-            FeatureRow(
                 icon = Icons.Default.Star,
                 color = Color(0xFFFFCC00),
                 title = "Smart Routes",
-                desc = "Algoritmo intelligente per trovare le migliori coincidenze tra treni regionali e metropolitane."
+                desc = "Trova le migliori coincidenze tra treni regionali e linee metropolitane."
             )
 
             FeatureRow(
                 icon = Icons.Default.Train,
                 color = Color(0xFF007AFF),
                 title = "Treni Salvati",
-                desc = "Tieni d'occhio i tuoi treni frequenti direttamente dalla dashboard principale."
+                desc = "Tieni d'occhio i tuoi treni più frequenti direttamente dalla dashboard principale."
             )
 
             FeatureRow(
                 icon = Icons.Default.Info,
-                color = Color(0xFF34C759),
-                title = "Widget per la Schermata Home",
-                desc = "Visualizza lo stato dei tuoi treni o del passante a colpo d'occhio senza aprire l'app."
+                color = Color(0xFFFF9500),
+                title = "Scioperi e News",
+                desc = "Notizie, aggiornamenti e avvisi in tempo reale per viaggiare informato."
+            )
+
+            FeatureRow(
+                icon = Icons.Default.Notifications,
+                color = Color(0xFFAF52DE),
+                title = "Notifiche",
+                desc = "Monitora i tuoi treni preferiti con avvisi push di ritardo e infomobilità."
             )
         }
     }
@@ -901,51 +887,6 @@ fun FeatureRow(
     }
 }
 
-@Composable
-fun OnboardingMetroView() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(160.dp)
-                .clip(CircleShape)
-                .background(Color(0xFF30B0C5).copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Tram,
-                contentDescription = null,
-                tint = Color(0xFF30B0C5),
-                modifier = Modifier.size(80.dp)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(40.dp))
-
-        Text(
-            text = "Orari della Metropolitana",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Esplora gli orari integrati della metropolitana di Milano direttamente dentro l'app, combinando i percorsi in modo intelligente con i tabelloni del Passante.",
-            fontSize = 15.sp,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-            textAlign = TextAlign.Center,
-            lineHeight = 22.sp
-        )
-    }
-}
 
 @Composable
 fun OnboardingGPSView(onRequestLocationPermission: () -> Unit) {
@@ -984,7 +925,7 @@ fun OnboardingGPSView(onRequestLocationPermission: () -> Unit) {
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "Resta aggiornato su scioperi o disservizi con notizie ed elaborazioni intelligenti.\n\nConsenti l'accesso alla posizione per rilevare automaticamente le stazioni del Passante a te più vicine per una navigazione immediata!",
+            text = "Resta aggiornato su scioperi o disservizi con notizie ed elaborazioni intelligenti.\n\nConsenti l'accesso alla posizione: il GPS serve per rilevare le stazioni a te più vicine per una navigazione immediata!",
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
             textAlign = TextAlign.Center,

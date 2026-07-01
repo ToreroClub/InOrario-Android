@@ -2,13 +2,16 @@ package com.carlo.inorario.ui.theme
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
@@ -41,6 +44,15 @@ private val LightColorScheme = lightColorScheme(
     onSurfaceVariant = LightOnSurfaceVariant,
 )
 
+// iOS-like shapes — più arrotondati del default M3
+private val InOrarioShapes = Shapes(
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(28.dp)
+)
+
 @Composable
 fun InOrarioTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -62,6 +74,7 @@ fun InOrarioTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
+        shapes = InOrarioShapes,
         content = content
     )
 }

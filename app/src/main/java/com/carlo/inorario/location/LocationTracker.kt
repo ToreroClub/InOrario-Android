@@ -5,6 +5,7 @@ import android.content.Context
 import android.location.Location
 import android.os.Looper
 import android.util.Log
+import com.carlo.inorario.data.model.RFIStation
 import com.carlo.inorario.data.model.Station
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -12,8 +13,11 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.io.InputStreamReader
 
 class LocationTracker(context: Context) {
     private val fusedLocationClient: FusedLocationProviderClient =
@@ -25,26 +29,38 @@ class LocationTracker(context: Context) {
     private val _nearbyStation = MutableStateFlow<Station?>(null)
     val nearbyStation: StateFlow<Station?> = _nearbyStation
 
-    private val referenceStations = listOf(
-        Station("Rho Fiera", "3098", "S01039", 45.5215, 9.0883),
-        Station("Certosa", "1708", "S01640", 45.5085, 9.1272),
-        Station("Villapizzone", "3099", "S01639", 45.4998, 9.1465),
-        Station("Lancetti", "1713", "S01643", 45.4925, 9.1751),
-        Station("P. Garibaldi Passante", "1714", "S01647", 45.4844, 9.1887),
-        Station("Repubblica", "1719", "S01648", 45.4795, 9.1963),
-        Station("Porta Venezia", "1723", "S01649", 45.4746, 9.2052),
-        Station("Dateo", "3468", "S01650", 45.4682, 9.2158),
-        Station("Porta Vittoria", "1718", "S01633", 45.4613, 9.2227),
-        Station("Forlanini", "3169", "S01492", 45.4625, 9.2368),
-        Station("Magenta", "1618", "S01040", 45.4641, 8.8845),
-        Station("Porta Garibaldi", "1715", "S01645", 45.4844, 9.1887),
-        Station("Milano Centrale", "1728", "S01700", 45.4849, 9.2033),
-        Station("Vittuone-Arluno", "3119", "S01042", 45.4921, 8.9568),
-        Station("Pregnana Milanese", "381", "S01058", 45.5036, 9.0069),
-        Station("Novara", "1917", "S00248", 45.4524, 8.6253),
-        Station("Trecate", "2909", "S00252", 45.4374, 8.7428),
-        Station("Rho", "2345", "S01037", 45.5262, 9.0402),
-    )
+    private val referenceStations: List<Station> = loadStations(context)
+
+    companion object {
+        private fun loadStations(context: Context): List<Station> {
+            return try {
+                val inputStream = context.assets.open("rfi_stations.json")
+                val reader = InputStreamReader(inputStream)
+                val type = object : TypeToken<List<RFIStation>>() {}.type
+                val rawList: List<RFIStation> = Gson().fromJson(reader, type) ?: emptyList()
+                reader.close()
+
+                rawList.mapNotNull { rfi ->
+                    val lat = rfi.lat
+                    val lon = rfi.lon
+                    if (lat != null && lon != null && (lat != 0.0 || lon != 0.0)) {
+                        Station(
+                            name = rfi.name,
+                            rfiID = rfi.rfiID,
+                            vtID = rfi.vtID,
+                            lat = lat,
+                            lon = lon
+                        )
+                    } else {
+                        null
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("LocationTracker", "Error loading reference stations", e)
+                emptyList()
+            }
+        }
+    }
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(locationResult: LocationResult) {
@@ -62,11 +78,11 @@ class LocationTracker(context: Context) {
         try {
             fusedLocationClient.lastLocation.addOnSuccessListener { location ->
                 Log.d("LocationTracker", "lastLocation success: $location")
-                if (location != null) {
+                if (location != null && (System.currentTimeMillis() - location.time) < 60000) {
                     _userLocation.value = location
                     updateNearbyStation(location)
                 } else {
-                    Log.d("LocationTracker", "lastLocation was null, requesting location updates...")
+                    Log.d("LocationTracker", "lastLocation was null or too old (>60s), requesting location updates...")
                     // If last location is null, request dynamic updates once
                     val locationRequest = LocationRequest.Builder(
                         Priority.PRIORITY_BALANCED_POWER_ACCURACY,
@@ -108,12 +124,12 @@ class LocationTracker(context: Context) {
             Log.d("LocationTracker", "No candidate stations found")
         }
 
-        // Max range: 15 km (15000 meters)
-        if ((candidate != null) && (candidate.second < 15000)) {
+        // Max range: 5 km (5000 meters)
+        if ((candidate != null) && (candidate.second < 5000)) {
             Log.d("LocationTracker", "Setting nearbyStation to: ${candidate.first.name}")
             _nearbyStation.value = candidate.first
         } else {
-            Log.d("LocationTracker", "Candidate station is too far (> 15km) or null. Setting nearbyStation to null")
+            Log.d("LocationTracker", "Candidate station is too far (> 5km) or null. Setting nearbyStation to null")
             _nearbyStation.value = null
         }
     }

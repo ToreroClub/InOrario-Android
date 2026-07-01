@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.carlo.inorario.ui.viewmodel.ProfileViewModel
 import com.carlo.inorario.ui.viewmodel.TrainViewModel
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Star
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,6 +47,13 @@ fun NotificationCenterScreen(
     val notificationsEnabled by profileViewModel.remoteNotificationsEnabled.collectAsState()
     val fcmToken by profileViewModel.fcmToken.collectAsState()
     val favoriteTrains by trainViewModel.favoriteTrains.collectAsState()
+    val hasSupport by profileViewModel.hasSupport.collectAsState()
+    val strikeRegion by profileViewModel.strikeRegion.collectAsState()
+    val strikeNotificationsEnabled by profileViewModel.strikeNotificationsEnabled.collectAsState()
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val maxTrains = if (hasSupport) 10 else 1
+    val activeTrainsCount = favoriteTrains.count { it.notifyDelay }
 
     // Enrich any existing favorite trains that are missing origin/departure/arrival data
     LaunchedEffect(favoriteTrains.size) {
@@ -188,10 +197,179 @@ fun NotificationCenterScreen(
                             )
                         )
                     }
+
+                    if (notificationsEnabled) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+
+                        // Notifiche Scioperi Toggle
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Notifiche Scioperi",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Ricevi avvisi sugli scioperi del trasporto ferroviario",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                )
+                            }
+                            Switch(
+                                checked = strikeNotificationsEnabled,
+                                onCheckedChange = { newValue ->
+                                    profileViewModel.saveStrikeNotificationsEnabled(newValue)
+                                    trainViewModel.registerDeviceForStrikes(fcmToken)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = Color(0xFFFF9500)
+                                )
+                            )
+                        }
+
+                        if (strikeNotificationsEnabled) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+
+                            // Region picker for strikes
+                            var regionExpanded by remember { mutableStateOf(false) }
+                            val regions = listOf("Tutte", "Lombardia", "Lazio", "Campania", "Piemonte", "Veneto", "Emilia-Romagna")
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { regionExpanded = true }
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Regione Scioperi",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Filtra gli scioperi per regione",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    )
+                                }
+                                Box {
+                                    Text(
+                                        text = if (hasSupport) strikeRegion else "Tutte",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFF9500),
+                                        modifier = Modifier.clickable { regionExpanded = true }
+                                    )
+                                    DropdownMenu(
+                                        expanded = regionExpanded,
+                                        onDismissRequest = { regionExpanded = false }
+                                    ) {
+                                        regions.forEach { r ->
+                                            DropdownMenuItem(
+                                                text = { Text(r) },
+                                                onClick = {
+                                                    if (hasSupport) {
+                                                        profileViewModel.saveStrikeRegion(r)
+                                                        regionExpanded = false
+                                                    } else {
+                                                        regionExpanded = false
+                                                        android.widget.Toast.makeText(
+                                                            context,
+                                                            "La selezione della regione è disponibile solo con il supporto Premium",
+                                                            android.widget.Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            // --- Train list ---
+            // --- Premium / limit banner ---
+            item {
+                val atLimit = !hasSupport && activeTrainsCount >= maxTrains
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            if (atLimit) Color(0xFFFF9500).copy(alpha = 0.08f)
+                            else MaterialTheme.colorScheme.surface
+                        )
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Treni monitorati",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "$activeTrainsCount / $maxTrains con notifiche attive",
+                                fontSize = 12.sp,
+                                color = if (atLimit) Color(0xFFFF9500) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                            )
+                        }
+                        if (hasSupport) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF34C759).copy(alpha = 0.12f))
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFF34C759), modifier = Modifier.size(13.dp))
+                                    Text("Premium", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF34C759))
+                                }
+                            }
+                        }
+                    }
+                    if (atLimit) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = Color(0xFFFF9500).copy(alpha = 0.15f))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFFFF9500), modifier = Modifier.size(18.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Limite gratuito raggiunto",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFF9500)
+                                )
+                                Text(
+                                    text = "La gestione delle notifiche in tempo reale comporta costi di server continui per ciascun treno monitorato. Se trovi utile l'app, considera di sostenere lo sviluppo indipendente con un piccolo contributo: sbloccherai il monitoraggio fino a 10 treni contemporaneamente e le notifiche personalizzate per gli scioperi della tua regione.",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             if (favoriteTrains.isNotEmpty()) {
                 item {
                     Text(

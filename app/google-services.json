@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "123456789012",
-    "project_id": "dummy-project-id",
-    "storage_bucket": "dummy-project-id.appspot.com"
+    "project_number": "170740704270",
+    "project_id": "in-orario",
+    "storage_bucket": "in-orario.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789012:android:dummyappid",
+        "mobilesdk_app_id": "1:170740704270:android:9089debb1461b7efcb085f",
         "android_client_info": {
           "package_name": "com.carlo.inorario"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "dummy_api_key"
+          "current_key": "AIzaSyA1Tti7jZpD30gwI8k5ZTWnVrB1SLX8rqw"
         }
       ],
       "services": {

@@ -27,17 +27,17 @@ class ProfileViewModel(private val dataStoreManager: DataStoreManager) : ViewMod
     val fcmToken: StateFlow<String> = dataStoreManager.fcmTokenFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
 
-    val hasCappuccino: StateFlow<Boolean> = dataStoreManager.hasCappuccinoFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
-
-    val hasColazione: StateFlow<Boolean> = dataStoreManager.hasColazioneFlow
+    val hasSupport: StateFlow<Boolean> = dataStoreManager.hasSupportFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     val strikeRegion: StateFlow<String> = dataStoreManager.strikeRegionFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "Tutte")
 
-    val userName: StateFlow<String> = dataStoreManager.userNameFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), "")
+    val strikeNotificationsEnabled: StateFlow<Boolean> = dataStoreManager.strikeNotificationsEnabledFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val userName: StateFlow<String?> = dataStoreManager.userNameFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val useSpecialPassanteView: StateFlow<Boolean> = dataStoreManager.useSpecialPassanteViewFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
@@ -45,6 +45,18 @@ class ProfileViewModel(private val dataStoreManager: DataStoreManager) : ViewMod
     fun saveUserName(name: String) {
         viewModelScope.launch {
             dataStoreManager.saveUserName(name)
+        }
+    }
+
+    fun saveStrikeRegion(region: String) {
+        viewModelScope.launch {
+            dataStoreManager.saveStrikeRegion(region)
+        }
+    }
+
+    fun saveStrikeNotificationsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            dataStoreManager.saveStrikeNotificationsEnabled(enabled)
         }
     }
 
@@ -102,21 +114,9 @@ class ProfileViewModel(private val dataStoreManager: DataStoreManager) : ViewMod
         }
     }
 
-    fun saveHasCappuccino(value: Boolean) {
+    fun saveHasSupport(value: Boolean) {
         viewModelScope.launch {
-            dataStoreManager.saveHasCappuccino(value)
-        }
-    }
-
-    fun saveHasColazione(value: Boolean) {
-        viewModelScope.launch {
-            dataStoreManager.saveHasColazione(value)
-        }
-    }
-
-    fun saveStrikeRegion(region: String) {
-        viewModelScope.launch {
-            dataStoreManager.saveStrikeRegion(region)
+            dataStoreManager.saveHasSupport(value)
         }
     }
 }

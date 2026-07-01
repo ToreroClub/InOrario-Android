@@ -30,6 +30,7 @@ fun CustomizeDashboardScreen(
     onBackClick: () -> Unit
 ) {
     val sectionOrderState by trainViewModel.sectionOrder.collectAsState()
+    val rememberSectionState by trainViewModel.rememberSectionState.collectAsState()
     var mutableOrder by remember(sectionOrderState) { mutableStateOf(sectionOrderState) }
 
     Scaffold(
@@ -165,6 +166,35 @@ fun CustomizeDashboardScreen(
                                     )
                                 }
                             }
+                        }
+                        
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f)
+                        )
+                        
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Ricorda apertura",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            val isRemembered = rememberSectionState[section.name] ?: (section != AppSection.PASSANTE)
+                            Switch(
+                                checked = isRemembered,
+                                onCheckedChange = { trainViewModel.toggleRememberSectionState(section.name) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = Color(0xFF34C759)
+                                )
+                            )
                         }
                     }
                 }

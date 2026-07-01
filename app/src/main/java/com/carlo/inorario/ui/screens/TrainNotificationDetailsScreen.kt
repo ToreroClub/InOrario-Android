@@ -166,6 +166,9 @@ fun TrainNotificationDetailsScreen(
                                 notifyDeparture = if (newVal) train.notifyDeparture else false,
                                 notifyStationPass = if (newVal) train.notifyStationPass else false,
                                 stationPassName = train.stationPassName,
+                                activeDays = train.activeDays,
+                                notifyPlatformChange = if (newVal) train.notifyPlatformChange else false,
+                                platformChangeStationName = train.platformChangeStationName
                             )
                         }
                     )
@@ -185,7 +188,10 @@ fun TrainNotificationDetailsScreen(
                                 notifyDelay = train.notifyDelay,
                                 notifyDeparture = newVal,
                                 notifyStationPass = train.notifyStationPass,
-                                stationPassName = train.stationPassName
+                                stationPassName = train.stationPassName,
+                                activeDays = train.activeDays,
+                                notifyPlatformChange = train.notifyPlatformChange,
+                                platformChangeStationName = train.platformChangeStationName
                             )
                         }
                     )
@@ -205,9 +211,38 @@ fun TrainNotificationDetailsScreen(
                                 notifyDelay = train.notifyDelay,
                                 notifyDeparture = train.notifyDeparture,
                                 notifyStationPass = newVal,
-                                stationPassName = train.stationPassName
+                                stationPassName = train.stationPassName,
+                                activeDays = train.activeDays,
+                                notifyPlatformChange = train.notifyPlatformChange,
+                                platformChangeStationName = train.platformChangeStationName
                             )
                             // Fetch stops if enabling
+                            if (newVal && stops.isEmpty()) {
+                                trainViewModel.fetchStopsForFavorite(train.number)
+                            }
+                        }
+                    )
+                    
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp))
+
+                    // --- 4. Notify Platform Change ---
+                    NotifToggleRow(
+                        label = "Cambio Binario",
+                        description = "Ti avvisa se il binario previsto cambia.",
+                        iconColor = Color(0xFF5856D6),
+                        checked = train.notifyPlatformChange,
+                        enabled = train.notifyDelay,
+                        onCheckedChange = { newVal ->
+                            trainViewModel.updateFavoriteTrainNotifications(
+                                trainNumber = train.number,
+                                notifyDelay = train.notifyDelay,
+                                notifyDeparture = train.notifyDeparture,
+                                notifyStationPass = train.notifyStationPass,
+                                stationPassName = train.stationPassName,
+                                activeDays = train.activeDays,
+                                notifyPlatformChange = newVal,
+                                platformChangeStationName = train.platformChangeStationName
+                            )
                             if (newVal && stops.isEmpty()) {
                                 trainViewModel.fetchStopsForFavorite(train.number)
                             }
@@ -216,11 +251,64 @@ fun TrainNotificationDetailsScreen(
                 }
             }
 
-            // --- Station selector when station pass is on ---
-            if (train.notifyDelay && train.notifyStationPass) {
+            // --- Weekday selector (Premium) ---
+            if (train.notifyDelay) {
                 item {
                     Text(
-                        text = "SELEZIONA STAZIONE DI PASSAGGIO",
+                        text = "RIPETIZIONE (PREMIUM)",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                }
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        val days = listOf("L", "M", "M", "G", "V", "S", "D")
+                        val dayValues = listOf(1, 2, 3, 4, 5, 6, 7) // 1=Mon, 7=Sun
+                        days.forEachIndexed { index, name ->
+                            val dayValue = dayValues[index]
+                            val isSelected = train.activeDays?.contains(dayValue) == true
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isSelected) Color(0xFF007AFF) else MaterialTheme.colorScheme.surface)
+                                    .clickable {
+                                        val newDays = train.activeDays?.toMutableList() ?: mutableListOf()
+                                        if (isSelected) newDays.remove(dayValue) else newDays.add(dayValue)
+                                        trainViewModel.updateFavoriteTrainNotifications(
+                                            trainNumber = train.number,
+                                            notifyDelay = train.notifyDelay,
+                                            notifyDeparture = train.notifyDeparture,
+                                            notifyStationPass = train.notifyStationPass,
+                                            stationPassName = train.stationPassName,
+                                            activeDays = if (newDays.isEmpty()) null else newDays,
+                                            notifyPlatformChange = train.notifyPlatformChange,
+                                            platformChangeStationName = train.platformChangeStationName
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = name,
+                                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- Station selector when station pass or platform change is on ---
+            if (train.notifyDelay && (train.notifyStationPass || train.notifyPlatformChange)) {
+                item {
+                    Text(
+                        text = "SELEZIONA STAZIONE DI RIFERIMENTO",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
@@ -253,8 +341,8 @@ fun TrainNotificationDetailsScreen(
                     }
                 } else {
                     items(stops) { stop ->
-                        val isSelected = (stop.stationName == train.stationPassName) ||
-                            ((train.stationPassName == null) && (stops.firstOrNull() == stop))
+                        val isSelected = (stop.stationName == train.stationPassName) || (stop.stationName == train.platformChangeStationName) ||
+                            ((train.stationPassName == null && train.platformChangeStationName == null) && (stops.firstOrNull() == stop))
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -268,8 +356,11 @@ fun TrainNotificationDetailsScreen(
                                         trainNumber = train.number,
                                         notifyDelay = train.notifyDelay,
                                         notifyDeparture = train.notifyDeparture,
-                                        notifyStationPass = true,
-                                        stationPassName = stop.stationName
+                                        notifyStationPass = train.notifyStationPass,
+                                        stationPassName = if (train.notifyStationPass) stop.stationName else train.stationPassName,
+                                        activeDays = train.activeDays,
+                                        notifyPlatformChange = train.notifyPlatformChange,
+                                        platformChangeStationName = if (train.notifyPlatformChange) stop.stationName else train.platformChangeStationName
                                     )
                                 }
                                 .padding(horizontal = 16.dp, vertical = 14.dp),

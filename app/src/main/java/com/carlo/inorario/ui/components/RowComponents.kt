@@ -441,8 +441,8 @@ fun TrainRowView(
             ) {
                 Text(
                     text = train.destination,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -478,8 +478,8 @@ fun TrainRowView(
         ) {
             Text(
                 text = train.time,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
 

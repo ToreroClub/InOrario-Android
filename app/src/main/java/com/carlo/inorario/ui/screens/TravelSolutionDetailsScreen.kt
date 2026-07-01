@@ -18,6 +18,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -25,6 +29,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Train
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -213,12 +218,17 @@ fun TravelSolutionDetailsScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LiveTrainBand(
     segment: TravelSegment,
     trainViewModel: TrainViewModel
 ) {
     val isUrban = segment.trainCategory == "Trasporto Urbano"
+    val favoriteTrains by trainViewModel.favoriteTrains.collectAsState()
+    val isTrainFavorite = favoriteTrains.any { it.number == segment.trainNumber }
+    val context = LocalContext.current
+
     var isExpanded by remember { mutableStateOf(value = false) }
     var liveStatus by remember { mutableStateOf<StopsResult?>(null) }
     var isLoading by remember { mutableStateOf(value = false) }
@@ -240,11 +250,23 @@ fun LiveTrainBand(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .clickable {
-                if (!isUrban) {
-                    isExpanded = !isExpanded
+            .combinedClickable(
+                onClick = {
+                    if (!isUrban) {
+                        isExpanded = !isExpanded
+                    }
+                },
+                onLongClick = {
+                    if (!isUrban) {
+                        trainViewModel.toggleFavorite(segment.trainNumber, segment.destination)
+                        Toast.makeText(
+                            context,
+                            if (isTrainFavorite) "Treno rimosso dai preferiti" else "Treno aggiunto ai preferiti",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 }
-            }
+            )
             .padding(16.dp)
     ) {
         // Header
@@ -269,6 +291,15 @@ fun LiveTrainBand(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
+                if (isTrainFavorite) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = "Treno preferito",
+                        tint = Color(0xFFFF9500),
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
             }
 
             if (isUrban) {

@@ -19,13 +19,14 @@ import androidx.compose.material.icons.filled.Train
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,6 +38,7 @@ import com.carlo.inorario.data.model.SuburbanData
 import com.carlo.inorario.data.model.Train
 import com.carlo.inorario.ui.components.PassanteBranchView
 import com.carlo.inorario.ui.components.PassanteNodeView
+import com.carlo.inorario.ui.components.PassanteTrainRowView
 import com.carlo.inorario.ui.components.PassanteTunnelStatusHeaderView
 import com.carlo.inorario.ui.components.SuburbanLineBadge
 import com.carlo.inorario.ui.components.TrainRowView
@@ -55,7 +57,8 @@ fun HomeScreen(
     onNewsClick: () -> Unit,
     onProfileClick: () -> Unit,
     onStationClick: (Station) -> Unit,
-    onTrainClick: (SavedTrain) -> Unit
+    onTrainClick: (SavedTrain) -> Unit,
+    onSavedTripsClick: () -> Unit
 ) {
     val sectionOrder by trainViewModel.sectionOrder.collectAsState()
     val myStations by trainViewModel.myStations.collectAsState()
@@ -63,7 +66,7 @@ fun HomeScreen(
     val nearbyStation by locationViewModel.nearbyStation.collectAsState()
     val selectedSuburbanLines by trainViewModel.selectedSuburbanLines.collectAsState()
     val collapsedSections by trainViewModel.collapsedSections.collectAsState()
-
+    val savedTrips by trainViewModel.savedTrips.collectAsState()
     // Passante states
     val selectedPassanteStation by passanteViewModel.selectedPassanteStation.collectAsState()
     val passanteTrains by passanteViewModel.passanteTrains.collectAsState()
@@ -86,20 +89,65 @@ fun HomeScreen(
                 title = {
                     Text(
                         text = "In Orario",
-                        fontWeight = FontWeight.Black,
-                        fontSize = 22.sp,
+                        style = MaterialTheme.typography.displaySmall,
                         color = Color(0xFFFF9500)
                     )
                 },
-                actions = {
-                    IconButton(onClick = onSearchClick) {
-                        Icon(imageVector = Icons.Default.Search, contentDescription = "Cerca")
-                    }
-                    IconButton(onClick = onNewsClick) {
-                        Icon(painter = painterResource(id = android.R.drawable.ic_dialog_info), contentDescription = "News")
-                    }
+                navigationIcon = {
                     IconButton(onClick = onProfileClick) {
-                        Icon(imageVector = Icons.Default.Person, contentDescription = "Profilo")
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Profilo",
+                            tint = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                },
+                actions = {
+                    Row(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                shape = RoundedCornerShape(50)
+                            )
+                            .padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = onNewsClick) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = "News",
+                                tint = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+                        BadgedBox(
+                            badge = {
+                                if (savedTrips.isNotEmpty()) {
+                                    Badge(
+                                        containerColor = Color(0xFFFF3B30),
+                                        contentColor = Color.White
+                                    ) {
+                                        Text(text = savedTrips.size.toString())
+                                    }
+                                }
+                            },
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) {
+                            IconButton(onClick = onSavedTripsClick) {
+                                Icon(
+                                    imageVector = Icons.Default.Bookmark,
+                                    contentDescription = "Viaggi Salvati",
+                                    tint = Color(0xFFFF9500)
+                                )
+                            }
+                        }
+                        IconButton(onClick = onSearchClick) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Cerca",
+                                tint = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -147,22 +195,24 @@ fun HomeScreen(
                         )
                     }
                     AppSection.PASSANTE -> {
-                        PassanteSection(
-                            selectedStation = selectedPassanteStation,
-                            passanteTrains = passanteTrains,
-                            isLoading = isPassanteLoading,
-                            healthMsg = passanteHealthMsg,
-                            healthColor = passanteHealthColor,
-                            isCollapsed = isCollapsed,
-                            onHeaderClick = { trainViewModel.toggleSectionCollapsed(section.name) },
-                            passanteViewModel = passanteViewModel,
-                            selectedSuburbanLines = selectedSuburbanLines,
-                            onStationClick = onStationClick,
-                            onTrainClick = { train ->
-                                onTrainClick(SavedTrain(train.number, train.destination))
-                            },
-                            onInfoClick = { showPassanteInfoDialog = true }
-                        )
+                        if (selectedSuburbanLines.isNotEmpty()) {
+                            PassanteSection(
+                                selectedStation = selectedPassanteStation,
+                                passanteTrains = passanteTrains,
+                                isLoading = isPassanteLoading,
+                                healthMsg = passanteHealthMsg,
+                                healthColor = passanteHealthColor,
+                                isCollapsed = isCollapsed,
+                                onHeaderClick = { trainViewModel.toggleSectionCollapsed(section.name) },
+                                passanteViewModel = passanteViewModel,
+                                selectedSuburbanLines = selectedSuburbanLines,
+                                onStationClick = onStationClick,
+                                onTrainClick = { train ->
+                                    onTrainClick(SavedTrain(train.number, train.destination))
+                                },
+                                onInfoClick = { showPassanteInfoDialog = true }
+                            )
+                        }
                     }
                 }
             }
@@ -232,6 +282,58 @@ fun HomeScreen(
     }
 }
 
+// Shared section header composable — iOS style
+@Composable
+fun SectionHeader(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconTint: Color,
+    isCollapsed: Boolean,
+    onHeaderClick: () -> Unit,
+    trailingContent: @Composable (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onHeaderClick() }
+            .padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(iconTint.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            trailingContent?.invoke()
+            Icon(
+                imageVector = if (isCollapsed) Icons.Default.ChevronRight else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (isCollapsed) "Espandi" else "Comprimi",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
 // --- 1. Nearby Station Component ---
 @Composable
 fun NearbyStationSection(
@@ -242,89 +344,67 @@ fun NearbyStationSection(
     onRefreshClick: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onHeaderClick() }
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.LocationOn,
-                    contentDescription = null,
-                    tint = Color(0xFFFF3B30),
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "STAZIONE VICINA",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Icon(
-                    imageVector = if (isCollapsed) Icons.Default.ChevronRight else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (isCollapsed) "Espandi" else "Comprimi",
-                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                    modifier = Modifier.size(16.dp)
-                )
+        SectionHeader(
+            title = "Stazione Vicina",
+            icon = Icons.Default.LocationOn,
+            iconTint = Color(0xFFFF3B30),
+            isCollapsed = isCollapsed,
+            onHeaderClick = onHeaderClick,
+            trailingContent = {
+                IconButton(onClick = onRefreshClick, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Rileva",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
             }
-
-            IconButton(onClick = onRefreshClick, modifier = Modifier.size(24.dp)) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Rileva",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
+        )
 
         if (!isCollapsed) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(14.dp)
+                shape = MaterialTheme.shapes.medium,
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    if (station == null) {
+                if (station == null) {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                         Text(
-                            text = "Nessuna stazione rilevata entro 15km.",
-                            fontSize = 13.sp,
+                            text = "Nessuna stazione rilevata entro 5km.",
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    } else {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onStationClick(station) }
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = station.name,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Tocca per aprire il tabellone completo",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            Icon(
-                                imageVector = Icons.Default.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onStationClick(station) }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = station.name,
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Tocca per aprire il tabellone",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
                     }
                 }
             }
@@ -341,48 +421,28 @@ fun MyStationsSection(
     onStationClick: (Station) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onHeaderClick() }
-                .padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Train,
-                contentDescription = null,
-                tint = Color(0xFFFF9500),
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "LE MIE STAZIONI",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Icon(
-                imageVector = if (isCollapsed) Icons.Default.ChevronRight else Icons.Default.KeyboardArrowDown,
-                contentDescription = if (isCollapsed) "Espandi" else "Comprimi",
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                modifier = Modifier.size(16.dp)
-            )
-        }
+        SectionHeader(
+            title = "Le mie Stazioni",
+            icon = Icons.Default.Train,
+            iconTint = Color(0xFFFF9500),
+            isCollapsed = isCollapsed,
+            onHeaderClick = onHeaderClick
+        )
 
         if (!isCollapsed) {
             if (stations.isEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = MaterialTheme.shapes.medium,
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
-                    Box(modifier = Modifier.padding(16.dp)) {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                         Text(
-                            text = "Non hai stazioni salvate. Usa la barra di ricerca in alto per trovarne una e salvarla con la stella.",
-                            fontSize = 12.sp,
+                            text = "Non hai stazioni salvate. Cerca una stazione e salvala con la stella ★",
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = 18.sp
+                            lineHeight = 20.sp
                         )
                     }
                 }
@@ -390,7 +450,8 @@ fun MyStationsSection(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = MaterialTheme.shapes.medium,
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column {
                         stations.forEachIndexed { index, station ->
@@ -398,38 +459,26 @@ fun MyStationsSection(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { onStationClick(station) }
-                                    .padding(16.dp),
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.Train,
-                                        contentDescription = null,
-                                        tint = Color(0xFFFF9500),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = station.name,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                                
+                                Text(
+                                    text = station.name,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
                                 Icon(
                                     imageVector = Icons.Default.ChevronRight,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                                 )
                             }
-                            
                             if (index < stations.size - 1) {
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 16.dp),
                                     color = MaterialTheme.colorScheme.surfaceVariant,
-                                    thickness = 0.5.dp
+                                    thickness = 0.4.dp
                                 )
                             }
                         }
@@ -449,48 +498,28 @@ fun FavoriteTrainsSection(
     onTrainClick: (SavedTrain) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onHeaderClick() }
-                .padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Star,
-                contentDescription = null,
-                tint = Color(0xFFFFCC00),
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "I MIEI TRENI",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Icon(
-                imageVector = if (isCollapsed) Icons.Default.ChevronRight else Icons.Default.KeyboardArrowDown,
-                contentDescription = if (isCollapsed) "Espandi" else "Comprimi",
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                modifier = Modifier.size(16.dp)
-            )
-        }
+        SectionHeader(
+            title = "I miei Treni",
+            icon = Icons.Default.Star,
+            iconTint = Color(0xFFFFCC00),
+            isCollapsed = isCollapsed,
+            onHeaderClick = onHeaderClick
+        )
 
         if (!isCollapsed) {
             if (favorites.isEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = MaterialTheme.shapes.medium,
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
-                    Box(modifier = Modifier.padding(16.dp)) {
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
                         Text(
-                            text = "Non ci sono treni monitorati. Cerca un treno ed aggiungilo ai preferiti per vederlo qui.",
-                            fontSize = 12.sp,
+                            text = "Cerca un treno e aggiungilo ai preferiti per vederlo qui.",
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = 18.sp
+                            lineHeight = 20.sp
                         )
                     }
                 }
@@ -498,7 +527,8 @@ fun FavoriteTrainsSection(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = MaterialTheme.shapes.medium,
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column {
                         favorites.forEachIndexed { index, favTrain ->
@@ -506,46 +536,36 @@ fun FavoriteTrainsSection(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { onTrainClick(favTrain) }
-                                    .padding(16.dp),
+                                    .padding(horizontal = 16.dp, vertical = 13.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                    Icon(
-                                        imageVector = Icons.Default.Star,
-                                        contentDescription = null,
-                                        tint = Color(0xFFFFCC00),
-                                        modifier = Modifier.size(18.dp)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Treno ${favTrain.number}",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column {
-                                        Text(
-                                            text = "Treno ${favTrain.number}",
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = "Direzione ${favTrain.description}",
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "dir. ${favTrain.description}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                                 Icon(
                                     imageVector = Icons.Default.ChevronRight,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                                 )
                             }
-                            
                             if (index < favorites.size - 1) {
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 16.dp),
                                     color = MaterialTheme.colorScheme.surfaceVariant,
-                                    thickness = 0.5.dp
+                                    thickness = 0.4.dp
                                 )
                             }
                         }
@@ -572,6 +592,8 @@ fun PassanteSection(
     onTrainClick: (Train) -> Unit,
     onInfoClick: () -> Unit
 ) {
+    val passanteArrivals by passanteViewModel.passanteLineArrivals.collectAsState()
+    
     val tunnelStations = remember(selectedSuburbanLines) {
         val hasRhoLines = selectedSuburbanLines.contains("S5") || selectedSuburbanLines.contains("S6") || selectedSuburbanLines.contains("S11")
         val hasBovisaLines = selectedSuburbanLines.contains("S1") || selectedSuburbanLines.contains("S2") || selectedSuburbanLines.contains("S12") || selectedSuburbanLines.contains("S13") || selectedSuburbanLines.contains("S3") || selectedSuburbanLines.contains("S4")
@@ -603,40 +625,20 @@ fun PassanteSection(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onHeaderClick() }
-                .padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Train,
-                contentDescription = null,
-                tint = Color(0xFF34C759),
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "PASSANTE SUBURBANO",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Icon(
-                imageVector = if (isCollapsed) Icons.Default.ChevronRight else Icons.Default.KeyboardArrowDown,
-                contentDescription = if (isCollapsed) "Espandi" else "Comprimi",
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                modifier = Modifier.size(16.dp)
-            )
-        }
+        SectionHeader(
+            title = "Passante Suburbano",
+            icon = Icons.Default.Train,
+            iconTint = Color(0xFF34C759),
+            isCollapsed = isCollapsed,
+            onHeaderClick = onHeaderClick
+        )
 
         if (!isCollapsed) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(14.dp)
+                shape = MaterialTheme.shapes.medium,
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     // Health header
@@ -688,11 +690,21 @@ fun PassanteSection(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Text(
-                                text = "Tocca per vedere tutti i treni in transito",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            if (passanteArrivals.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = passanteArrivals.joinToString("   "),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF34C759)
+                                )
+                            } else {
+                                Text(
+                                    text = "Tocca per vedere tutti i treni in transito",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
 
                         if (isLoading) {
@@ -709,35 +721,367 @@ fun PassanteSection(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     // Direct S-branches split view
-                    val combinedOvest = remember(passanteTrains) {
-                        val viaBovisa = passanteViewModel.getPassanteTrainsViaBovisa(passanteTrains)
-                        val viaRho = passanteViewModel.getPassanteTrainsViaRho(passanteTrains)
-                        (viaBovisa + viaRho).sortedBy { it.time }
+                    val activeLines = remember(selectedSuburbanLines) {
+                        selectedSuburbanLines.filter { listOf("S1", "S2", "S5", "S6", "S12", "S13").contains(it) }
                     }
-                    val combinedEst = remember(passanteTrains) {
-                        val viaRogoredo = passanteViewModel.getPassanteTrainsViaRogoredo(passanteTrains)
-                        val viaForlanini = passanteViewModel.getPassanteTrainsViaForlanini(passanteTrains)
-                        (viaRogoredo + viaForlanini).sortedBy { it.time }
+                    val onlyCertosa = remember(activeLines) {
+                        activeLines.isNotEmpty() && activeLines.all { listOf("S5", "S6").contains(it) }
+                    }
+                    val onlyBovisa = remember(activeLines) {
+                        activeLines.isNotEmpty() && activeLines.all { listOf("S1", "S2", "S12", "S13").contains(it) }
                     }
 
+                    if (onlyCertosa) {
+                        val ovestTrains = remember(passanteTrains, activeLines) {
+                            passanteViewModel.getPassanteTrainsViaRho(passanteTrains).filter { t ->
+                                val cat = t.category.uppercase()
+                                activeLines.contains(cat) || cat == "S" || cat == "REG" || cat == "RV"
+                            }
+                        }
+                        val estTrains = remember(passanteTrains, activeLines) {
+                            passanteViewModel.getPassanteTrainsViaForlanini(passanteTrains).filter { t ->
+                                val cat = t.category.uppercase()
+                                activeLines.contains(cat) || cat == "S" || cat == "REG" || cat == "RV"
+                            }
+                        }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            PassanteBranchView(
+                                label = "← Direzione Ovest (Rho / Varese)",
+                                color = Color(0xFFFF9500), // Orange
+                                trains = ovestTrains,
+                                isLarge = true,
+                                onTrainClick = onTrainClick
+                            )
+                            PassanteBranchView(
+                                label = "Direzione Est (Forlanini / Treviglio) →",
+                                color = Color(0xFFFF9500), // Orange
+                                trains = estTrains,
+                                isLarge = true,
+                                onTrainClick = onTrainClick
+                            )
+                        }
+                    } else if (onlyBovisa) {
+                        val ovestTrains = remember(passanteTrains, activeLines) {
+                            passanteViewModel.getPassanteTrainsViaBovisa(passanteTrains).filter { t ->
+                                val cat = t.category.uppercase()
+                                activeLines.contains(cat) || cat == "S" || cat == "REG" || cat == "RV"
+                            }
+                        }
+                        val estTrains = remember(passanteTrains, activeLines) {
+                            passanteViewModel.getPassanteTrainsViaRogoredo(passanteTrains).filter { t ->
+                                val cat = t.category.uppercase()
+                                activeLines.contains(cat) || cat == "S" || cat == "REG" || cat == "RV"
+                            }
+                        }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            PassanteBranchView(
+                                label = "← Direzione Ovest (Bovisa / Saronno)",
+                                color = Color(0xFFFF3B30), // Red
+                                trains = ovestTrains,
+                                isLarge = true,
+                                onTrainClick = onTrainClick
+                            )
+                            PassanteBranchView(
+                                label = "Direzione Est (Rogoredo / Pavia / Lodi) →",
+                                color = Color(0xFFFF3B30), // Red
+                                trains = estTrains,
+                                isLarge = true,
+                                onTrainClick = onTrainClick
+                            )
+                        }
+                    } else {
+                        val bovisaTrains = remember(passanteTrains, selectedSuburbanLines) {
+                            passanteViewModel.getPassanteTrainsViaBovisa(passanteTrains).filter { t ->
+                                val cat = t.category.uppercase()
+                                selectedSuburbanLines.isEmpty() || selectedSuburbanLines.contains(cat) || cat == "S" || cat == "REG" || cat == "RV"
+                            }
+                        }
+                        val forlaniniTrains = remember(passanteTrains, selectedSuburbanLines) {
+                            passanteViewModel.getPassanteTrainsViaForlanini(passanteTrains).filter { t ->
+                                val cat = t.category.uppercase()
+                                selectedSuburbanLines.isEmpty() || selectedSuburbanLines.contains(cat) || cat == "S" || cat == "REG" || cat == "RV"
+                            }
+                        }
+                        val rhoTrains = remember(passanteTrains, selectedSuburbanLines) {
+                            passanteViewModel.getPassanteTrainsViaRho(passanteTrains).filter { t ->
+                                val cat = t.category.uppercase()
+                                selectedSuburbanLines.isEmpty() || selectedSuburbanLines.contains(cat) || cat == "S" || cat == "REG" || cat == "RV"
+                            }
+                        }
+                        val rogoredoTrains = remember(passanteTrains, selectedSuburbanLines) {
+                            passanteViewModel.getPassanteTrainsViaRogoredo(passanteTrains).filter { t ->
+                                val cat = t.category.uppercase()
+                                selectedSuburbanLines.isEmpty() || selectedSuburbanLines.contains(cat) || cat == "S" || cat == "REG" || cat == "RV"
+                            }
+                        }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                PassanteBranchView(
+                                    label = "← Bovisa",
+                                    color = Color(0xFFFF3B30), // Red
+                                    trains = bovisaTrains,
+                                    modifier = Modifier.weight(1f),
+                                    onTrainClick = onTrainClick
+                                )
+                                PassanteBranchView(
+                                    label = "Forlanini →",
+                                    color = Color(0xFFFF9500), // Orange
+                                    trains = forlaniniTrains,
+                                    modifier = Modifier.weight(1f),
+                                    onTrainClick = onTrainClick
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                PassanteBranchView(
+                                    label = "← Rho",
+                                    color = Color(0xFFFF9500), // Orange
+                                    trains = rhoTrains,
+                                    modifier = Modifier.weight(1f),
+                                    onTrainClick = onTrainClick
+                                )
+                                PassanteBranchView(
+                                    label = "Rogoredo →",
+                                    color = Color(0xFFFF3B30), // Red
+                                    trains = rogoredoTrains,
+                                    modifier = Modifier.weight(1f),
+                                    onTrainClick = onTrainClick
+                                )
+                            }
+                        }
+
+                    // Altre Partenze
+                        val filteredBovisa = remember(passanteTrains, selectedSuburbanLines) {
+                            passanteViewModel.getPassanteTrainsViaBovisa(passanteTrains).filter { t ->
+                                selectedSuburbanLines.isEmpty() || selectedSuburbanLines.contains(t.category.uppercase())
+                            }
+                        }
+                        val filteredRho = remember(passanteTrains, selectedSuburbanLines) {
+                            passanteViewModel.getPassanteTrainsViaRho(passanteTrains).filter { t ->
+                                selectedSuburbanLines.isEmpty() || selectedSuburbanLines.contains(t.category.uppercase())
+                            }
+                        }
+                        val filteredForlanini = remember(passanteTrains, selectedSuburbanLines) {
+                            passanteViewModel.getPassanteTrainsViaForlanini(passanteTrains).filter { t ->
+                                selectedSuburbanLines.isEmpty() || selectedSuburbanLines.contains(t.category.uppercase())
+                            }
+                        }
+                        val filteredRogoredo = remember(passanteTrains, selectedSuburbanLines) {
+                            passanteViewModel.getPassanteTrainsViaRogoredo(passanteTrains).filter { t ->
+                                selectedSuburbanLines.isEmpty() || selectedSuburbanLines.contains(t.category.uppercase())
+                            }
+                        }
+
+                        val classified = remember(filteredBovisa, filteredRho, filteredForlanini, filteredRogoredo) {
+                            filteredBovisa + filteredRho + filteredForlanini + filteredRogoredo
+                        }
+
+                        val unclassified = remember(passanteTrains, selectedSuburbanLines, classified) {
+                            passanteTrains.filter { t ->
+                                val isPreferred = selectedSuburbanLines.isEmpty() || selectedSuburbanLines.contains(t.category.uppercase())
+                                isPreferred && !classified.any { it.number == t.number }
+                            }
+                        }
+
+                        if (unclassified.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "ALTRE PARTENZE",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                unclassified.take(3).forEach { train ->
+                                    PassanteTrainRowView(train = train) { onTrainClick(train) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- 5. Viewed Recent Stations ---
+@Composable
+fun ViewedRecentStationsSection(
+    stations: List<Station>,
+    onStationClick: (Station) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(Color(0xFF007AFF).copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.History,
+                        contentDescription = null,
+                        tint = Color(0xFF007AFF),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Stazioni visitate",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = MaterialTheme.shapes.medium,
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        ) {
+            Column {
+                stations.forEachIndexed { index, station ->
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onStationClick(station) }
+                            .padding(horizontal = 16.dp, vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        PassanteBranchView(
-                            label = "← Ovest (Bovisa / Rho)",
-                            color = Color(0xFF34C759),
-                            trains = combinedOvest,
-                            modifier = Modifier.weight(1f),
-                            onTrainClick = onTrainClick
+                        Text(
+                            text = station.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                    }
+                    if (index < stations.size - 1) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            thickness = 0.4.dp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
-                        PassanteBranchView(
-                            label = "Est (Rogoredo / Treviglio) →",
-                            color = Color(0xFFFF9500),
-                            trains = combinedEst,
-                            modifier = Modifier.weight(1f),
-                            onTrainClick = onTrainClick
+// --- 6. Viewed Recent Trains ---
+@Composable
+fun ViewedRecentTrainsSection(
+    trains: List<SavedTrain>,
+    onTrainClick: (SavedTrain) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(Color(0xFF007AFF).copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.History,
+                        contentDescription = null,
+                        tint = Color(0xFF007AFF),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "Treni visti di recente",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = MaterialTheme.shapes.medium,
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        ) {
+            Column {
+                trains.forEachIndexed { index, train ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onTrainClick(train) }
+                            .padding(horizontal = 16.dp, vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Treno ${train.number}",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "dir. ${train.description}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                    }
+                    if (index < trains.size - 1) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            thickness = 0.4.dp
                         )
                     }
                 }
