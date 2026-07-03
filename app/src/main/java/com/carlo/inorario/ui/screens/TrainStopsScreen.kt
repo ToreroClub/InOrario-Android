@@ -202,16 +202,9 @@ fun TrainStopsScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("Treno Fermo / Bloccato") },
+                                text = { Text("Treno Fermo") },
                                 onClick = { 
                                     trainViewModel.postComfortReport(train.number, "stopped", status.lastStation.ifBlank { "Linea" }, status.lastStation, status.lastTime)
-                                    showReportMenu = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Treno Ripartito / In Movimento") },
-                                onClick = { 
-                                    trainViewModel.postComfortReport(train.number, "moving", null, status.lastStation, status.lastTime)
                                     showReportMenu = false
                                 }
                             )

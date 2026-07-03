@@ -70,6 +70,9 @@ interface BackendService {
 }
 
 object NetworkClient {
+    @Volatile
+    var fcmToken: String? = null
+
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
@@ -79,6 +82,17 @@ object NetworkClient {
         .readTimeout(5, TimeUnit.SECONDS)
         .writeTimeout(5, TimeUnit.SECONDS)
         .addInterceptor(loggingInterceptor)
+        .addInterceptor { chain ->
+            val original = chain.request()
+            val requestBuilder = original.newBuilder()
+            
+            val host = original.url.host
+            if (host.contains("gestioneinorario.toreroclub.com") && !fcmToken.isNullOrEmpty()) {
+                requestBuilder.header("X-Device-Token", fcmToken!!)
+            }
+            
+            chain.proceed(requestBuilder.build())
+        }
         .build()
 
     val viaggiatrenoService: ViaggiaTrenoService by lazy {

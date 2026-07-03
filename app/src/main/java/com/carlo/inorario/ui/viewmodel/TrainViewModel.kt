@@ -332,6 +332,10 @@ class TrainViewModel(
                     put("platform", "android")
                     put("strike_region", region)
                     put("strike_enabled", strikeEnabled)
+                    put("device_model", android.os.Build.MODEL)
+                    put("os_version", "Android " + android.os.Build.VERSION.RELEASE)
+                    put("ai_engine", "none")
+                    put("has_support", isPremium)
                 }
                 val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
                 val request = okhttp3.Request.Builder()
@@ -384,6 +388,10 @@ class TrainViewModel(
                     put("strike_enabled", strikeEnabled)
                     put("departure_time", trainPref?.departureTime.orEmpty())
                     put("arrival_time", trainPref?.arrivalTime.orEmpty())
+                    put("device_model", android.os.Build.MODEL)
+                    put("os_version", "Android " + android.os.Build.VERSION.RELEASE)
+                    put("ai_engine", "none")
+                    put("has_support", isPremium)
                 }
                 val body = payload.toString().toRequestBody("application/json; charset=utf-8".toMediaTypeOrNull())
                 val request = okhttp3.Request.Builder()

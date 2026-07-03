@@ -88,6 +88,13 @@ class MainActivity : ComponentActivity() {
             }
         })
 
+        // Collect token and set in NetworkClient
+        lifecycleScope.launch {
+            dataStoreManager.fcmTokenFlow.collect { token ->
+                com.carlo.inorario.data.network.NetworkClient.fcmToken = token
+            }
+        }
+
         // Retrieve Firebase Messaging token on launch and update preferences
         try {
             com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
